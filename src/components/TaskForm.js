@@ -8,136 +8,195 @@ import IconButton from '@mui/material/IconButton';
 import CloseIcon from '@mui/icons-material/Close';
 import MenuItem from '@mui/material/MenuItem';
 import { DateTimePicker } from '@mui/x-date-pickers';
-import { motion } from 'framer-motion';
-import { v4 as uuidv4 } from 'uuid';
+import { motion, AnimatePresence } from 'framer-motion';
+import Typography from '@mui/material/Typography';
 
 const StyledPaper = styled(Paper)(({ theme }) => ({
-  position: 'fixed',
-  right: theme.spacing(2),
-  bottom: theme.spacing(2),
-  width: '400px',
   padding: theme.spacing(3),
-  zIndex: 1000,
+  width: '100%',
+  maxWidth: 600,
+  position: 'relative',
+  overflow: 'hidden',
+  borderRadius: theme.shape.borderRadius * 2,
+  boxShadow: theme.shadows[10],
+  '& .close-button': {
+    position: 'absolute',
+    right: theme.spacing(1),
+    top: theme.spacing(1),
+  },
 }));
 
 const priorities = [
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
+  { value: 'low', label: 'Low Priority', color: 'success.main' },
+  { value: 'medium', label: 'Medium Priority', color: 'warning.main' },
+  { value: 'high', label: 'High Priority', color: 'error.main' },
 ];
 
-const TaskForm = ({ task, onSubmit, onClose }) => {
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [priority, setPriority] = useState('medium');
-  const [dueDate, setDueDate] = useState(null);
+const TaskForm = ({ 
+  task = null, 
+  onSubmit, 
+  onClose, 
+  onDelete 
+}) => {
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    priority: 'medium',
+    dueDate: null,
+  });
+
+  const [errors, setErrors] = useState({});
 
   useEffect(() => {
     if (task) {
-      setTitle(task.title || '');
-      setDescription(task.description || '');
-      setPriority(task.priority || 'low');
-      setDueDate(task.dueDate ? new Date(task.dueDate) : null);
+      setFormData({
+        title: task.title || '',
+        description: task.description || '',
+        priority: task.priority || 'medium',
+        dueDate: task.dueDate ? new Date(task.dueDate) : null,
+      });
     }
   }, [task]);
 
+  const handleChange = (field) => (event) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: event.target.value
+    }));
+    // Clear error when user starts typing
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: null }));
+    }
+  };
+
+  const handleDateChange = (newValue) => {
+    setFormData(prev => ({
+      ...prev,
+      dueDate: newValue
+    }));
+  };
+
+  const validate = () => {
+    const newErrors = {};
+    if (!formData.title.trim()) {
+      newErrors.title = 'Title is required';
+    }
+    if (formData.title.length > 100) {
+      newErrors.title = 'Title must be less than 100 characters';
+    }
+    if (formData.description && formData.description.length > 500) {
+      newErrors.description = 'Description must be less than 500 characters';
+    }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (!validate()) return;
+
     const taskData = {
-      title,
-      description,
-      priority,
-      dueDate: dueDate ? dueDate.toISOString() : null,
+      ...formData,
+      dueDate: formData.dueDate ? formData.dueDate.toISOString() : null,
     };
 
     if (task) {
       taskData.id = task.id;
+      taskData.completed = task.completed;
+      taskData.completedAt = task.completedAt;
     }
 
     onSubmit(taskData);
-    onClose();
-  };
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    switch (name) {
-      case 'title':
-        setTitle(value);
-        break;
-      case 'description':
-        setDescription(value);
-        break;
-      case 'priority':
-        setPriority(value);
-        break;
-      default:
-        break;
-    }
   };
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 50 }}
+      initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 50 }}
+      exit={{ opacity: 0, y: -20 }}
     >
-      <StyledPaper elevation={4}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-          <h2 style={{ margin: 0 }}>{task ? 'Edit Task' : 'New Task'}</h2>
-          <IconButton onClick={onClose} size="small">
-            <CloseIcon />
-          </IconButton>
-        </Box>
+      <StyledPaper elevation={3}>
+        <IconButton 
+          className="close-button"
+          onClick={onClose}
+          size="small"
+        >
+          <CloseIcon />
+        </IconButton>
+
         <form onSubmit={handleSubmit}>
-          <TextField
-            fullWidth
-            label="Title"
-            name="title"
-            value={title}
-            onChange={handleChange}
-            required
-            margin="normal"
-          />
-          <TextField
-            fullWidth
-            label="Description"
-            name="description"
-            value={description}
-            onChange={handleChange}
-            multiline
-            rows={3}
-            margin="normal"
-          />
-          <TextField
-            select
-            fullWidth
-            label="Priority"
-            name="priority"
-            value={priority}
-            onChange={handleChange}
-            margin="normal"
-          >
-            {priorities.map((option) => (
-              <MenuItem key={option.value} value={option.value}>
-                {option.label}
-              </MenuItem>
-            ))}
-          </TextField>
-          <DateTimePicker
-            label="Due Date"
-            value={dueDate}
-            onChange={(newValue) => setDueDate(newValue)}
-            renderInput={(params) => (
-              <TextField {...params} fullWidth margin="normal" />
-            )}
-          />
-          <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-            <Button variant="outlined" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button variant="contained" type="submit">
-              {task ? 'Update' : 'Create'}
-            </Button>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <Typography variant="h5">
+              {task ? 'Edit Task' : 'New Task'}
+            </Typography>
+
+            <TextField
+              label="Title"
+              value={formData.title}
+              onChange={handleChange('title')}
+              error={!!errors.title}
+              helperText={errors.title}
+              fullWidth
+              required
+              autoFocus
+            />
+
+            <TextField
+              label="Description"
+              value={formData.description}
+              onChange={handleChange('description')}
+              error={!!errors.description}
+              helperText={errors.description}
+              multiline
+              rows={4}
+              fullWidth
+            />
+
+            <TextField
+              select
+              label="Priority"
+              value={formData.priority}
+              onChange={handleChange('priority')}
+              fullWidth
+            >
+              {priorities.map((option) => (
+                <MenuItem 
+                  key={option.value} 
+                  value={option.value}
+                  sx={{ color: option.color }}
+                >
+                  {option.label}
+                </MenuItem>
+              ))}
+            </TextField>
+
+            <DateTimePicker
+              label="Due Date"
+              value={formData.dueDate}
+              onChange={handleDateChange}
+              renderInput={(params) => <TextField {...params} fullWidth />}
+              minDate={new Date()}
+              clearable
+            />
+
+            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 2 }}>
+              {task && (
+                <Button
+                  variant="outlined"
+                  color="error"
+                  onClick={() => onDelete(task.id)}
+                >
+                  Delete
+                </Button>
+              )}
+              <Button
+                variant="contained"
+                type="submit"
+                color="primary"
+              >
+                {task ? 'Save Changes' : 'Create Task'}
+              </Button>
+            </Box>
           </Box>
         </form>
       </StyledPaper>

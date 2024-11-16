@@ -69,11 +69,15 @@ npm run make-installer
 
 - Frontend Framework: React 18
 - Desktop Framework: Electron 25
-- UI Components: Material-UI v5
+- UI Components: Material-UI v5 with Icons and Date Pickers
+- State Management: React Context API
 - Animations: Framer Motion
 - Date Handling: Date-fns
 - Data Storage: Electron Store
+- Logging: Electron Log
+- Auto Updates: Electron Updater
 - Build Tools: Electron Builder, Craco
+- Unique IDs: UUID
 
 ## Project Structure
 
@@ -81,15 +85,13 @@ npm run make-installer
 taskmaster/
 ├── src/               # React application source
 │   ├── components/    # React components
-│   ├── contexts/      # React contexts
-│   ├── hooks/         # Custom React hooks
-│   ├── styles/        # CSS and theme files
-│   ├── App.js         # Main React component
-│   └── index.js       # React entry point
-├── main.js            # Electron main process
-├── assets/            # Application assets
-├── public/            # Static files
-└── scripts/          # Build and utility scripts
+│   ├── hooks/        # Custom React hooks
+│   ├── App.js        # Main React component
+│   └── index.js      # React entry point
+├── electron/         # Electron main process files
+├── assets/          # Application assets
+├── public/          # Static files
+└── scripts/         # Build and utility scripts
 ```
 
 ## Development

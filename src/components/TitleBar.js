@@ -1,14 +1,17 @@
 import React from 'react';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
+import Typography from '@mui/material/Typography';
 import MinimizeIcon from '@mui/icons-material/Remove';
 import MaximizeIcon from '@mui/icons-material/CropSquare';
 import CloseIcon from '@mui/icons-material/Close';
-const { ipcRenderer } = window.require('electron');
+import DarkModeIcon from '@mui/icons-material/DarkMode';
+import LightModeIcon from '@mui/icons-material/LightMode';
+import { alpha } from '@mui/material/styles';
 
-const TitleBar = () => {
+const TitleBar = ({ darkMode, onThemeToggle }) => {
   const handleWindowControl = (command) => {
-    ipcRenderer.invoke('window-controls', command);
+    window.electron.window[command]();
   };
 
   return (
@@ -18,20 +21,52 @@ const TitleBar = () => {
         height: '32px',
         backgroundColor: 'background.paper',
         display: 'flex',
-        justifyContent: 'flex-end',
+        justifyContent: 'space-between',
         alignItems: 'center',
-        px: 1,
+        pl: 2,
+        pr: 1,
         borderBottom: 1,
-        borderColor: 'divider',
+        borderColor: (theme) => alpha(theme.palette.divider, 0.1),
+        position: 'relative',
+        zIndex: 1100,
       }}
     >
-      <Box sx={{ WebkitAppRegion: 'no-drag' }}>
+      <Typography
+        variant="subtitle2"
+        component="div"
+        sx={{
+          fontWeight: 500,
+          color: 'text.secondary',
+          fontSize: '0.75rem',
+        }}
+      >
+        TaskMaster
+      </Typography>
+
+      <Box sx={{ 
+        WebkitAppRegion: 'no-drag',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 0.5,
+      }}>
+        <IconButton
+          size="small"
+          onClick={onThemeToggle}
+          sx={{ 
+            fontSize: '1rem',
+            '&:hover': {
+              backgroundColor: 'action.hover',
+            }
+          }}
+        >
+          {darkMode ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
+        </IconButton>
+
         <IconButton
           size="small"
           onClick={() => handleWindowControl('minimize')}
-          sx={{ 
-            width: 28, 
-            height: 28,
+          sx={{
+            fontSize: '1rem',
             '&:hover': {
               backgroundColor: 'action.hover',
             }
@@ -39,12 +74,12 @@ const TitleBar = () => {
         >
           <MinimizeIcon fontSize="small" />
         </IconButton>
+
         <IconButton
           size="small"
           onClick={() => handleWindowControl('maximize')}
-          sx={{ 
-            width: 28, 
-            height: 28,
+          sx={{
+            fontSize: '1rem',
             '&:hover': {
               backgroundColor: 'action.hover',
             }
@@ -52,12 +87,12 @@ const TitleBar = () => {
         >
           <MaximizeIcon fontSize="small" />
         </IconButton>
+
         <IconButton
           size="small"
           onClick={() => handleWindowControl('close')}
-          sx={{ 
-            width: 28, 
-            height: 28,
+          sx={{
+            fontSize: '1rem',
             '&:hover': {
               backgroundColor: 'error.main',
               color: 'error.contrastText',

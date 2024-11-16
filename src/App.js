@@ -1,34 +1,103 @@
 import React, { useState, useEffect } from 'react';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { ThemeProvider, createTheme, useTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import Box from '@mui/material/Box';
 import { motion, AnimatePresence } from 'framer-motion';
+import Box from '@mui/material/Box';
 import Sidebar from './components/Sidebar';
 import TaskList from './components/TaskList';
 import TaskForm from './components/TaskForm';
 import TitleBar from './components/TitleBar';
+import UpdateNotification from './components/UpdateNotification';
 import { useTaskStore } from './hooks/useTaskStore';
+import TextField from '@mui/material/TextField';
+import InputAdornment from '@mui/material/InputAdornment';
+import SearchIcon from '@mui/icons-material/Search';
+import FormControl from '@mui/material/FormControl';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import SortIcon from '@mui/icons-material/Sort';
+import Button from '@mui/material/Button';
+import AddIcon from '@mui/icons-material/Add';
 
-const { ipcRenderer } = window.require('electron');
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    this.setState({ errorInfo });
+    console.error('Error caught by boundary:', error, errorInfo);
+    // You could also log to an error reporting service here
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <Box
+          sx={{
+            p: 3,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            minHeight: '100vh',
+            bgcolor: 'error.main',
+            color: 'error.contrastText',
+          }}
+        >
+          <h1>Something went wrong</h1>
+          <pre style={{ whiteSpace: 'pre-wrap', maxWidth: '800px', overflow: 'auto' }}>
+            {this.state.error?.toString()}
+          </pre>
+          <Box sx={{ mt: 2 }}>
+            <Button
+              variant="contained"
+              color="inherit"
+              onClick={() => window.location.reload()}
+            >
+              Reload Application
+            </Button>
+          </Box>
+        </Box>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 function App() {
   const [darkMode, setDarkMode] = useState(() => {
     const stored = localStorage.getItem('darkMode');
-    return stored ? JSON.parse(stored) : false;
+    return stored ? JSON.parse(stored) : window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
   
-  const handleThemeChange = (isDark) => {
-    setDarkMode(isDark);
-    localStorage.setItem('darkMode', JSON.stringify(isDark));
-  };
-
   const [selectedTask, setSelectedTask] = useState(null);
-  const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedTab, setSelectedTab] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [sortBy, setSortBy] = useState('');
   const { tasks, loading, createTask, updateTask, deleteTask, toggleTaskCompletion } = useTaskStore();
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = (e) => {
+      setDarkMode(e.matches);
+    };
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('darkMode', JSON.stringify(darkMode));
+  }, [darkMode]);
 
   const theme = createTheme({
     palette: {
@@ -39,14 +108,28 @@ function App() {
       secondary: {
         main: '#f50057',
       },
+      background: {
+        default: darkMode ? '#121212' : '#f5f5f5',
+        paper: darkMode ? '#1e1e1e' : '#ffffff',
+      },
     },
     typography: {
-      fontFamily: 'Inter, sans-serif',
+      fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
+      h1: { fontWeight: 700 },
+      h2: { fontWeight: 600 },
+      h3: { fontWeight: 600 },
+      h4: { fontWeight: 600 },
+      h5: { fontWeight: 600 },
+      h6: { fontWeight: 600 },
+    },
+    shape: {
+      borderRadius: 12,
     },
     components: {
       MuiButton: {
         styleOverrides: {
           root: {
+            textTransform: 'none',
             borderRadius: 8,
           },
         },
@@ -54,140 +137,174 @@ function App() {
       MuiPaper: {
         styleOverrides: {
           root: {
-            borderRadius: 12,
+            backgroundImage: 'none',
+          },
+        },
+      },
+      MuiDrawer: {
+        styleOverrides: {
+          paper: {
+            borderRight: 0,
           },
         },
       },
     },
   });
 
-  const handleCreateTask = async (task) => {
-    await createTask(task);
-    setIsFormOpen(false);
+  const handleTaskAction = async (actionFn, ...args) => {
+    try {
+      await actionFn(...args);
+    } catch (error) {
+      console.error('Task action failed:', error);
+      // You could show a snackbar/toast here
+    }
   };
 
-  const handleUpdateTask = async (task) => {
-    await updateTask(task);
+  const handleSaveTask = (taskData) => {
+    if (selectedTask) {
+      handleTaskAction(updateTask, { ...selectedTask, ...taskData });
+    } else {
+      handleTaskAction(createTask, taskData);
+    }
+    setDrawerOpen(false);
     setSelectedTask(null);
-    setIsFormOpen(false);
   };
 
-  const handleToggleComplete = async (taskId) => {
-    try {
-      await toggleTaskCompletion(taskId);
-    } catch (error) {
-      console.error('Error toggling task completion:', error);
-    }
+  const handleDeleteTask = (taskId) => {
+    handleTaskAction(deleteTask, taskId);
+    setDrawerOpen(false);
+    setSelectedTask(null);
   };
 
-  const handleDeleteTask = async (taskId) => {
-    try {
-      await deleteTask(taskId);
-    } catch (error) {
-      console.error('Error deleting task:', error);
-    }
+  const handleTaskClick = (task) => {
+    setSelectedTask(task);
+    setDrawerOpen(true);
   };
 
-  const getFilteredTasks = () => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+  const handleDrawerClose = () => {
+    setDrawerOpen(false);
+    setSelectedTask(null);
+  };
 
-    // First filter by search query
-    let filteredTasks = tasks.filter(task => {
-      const searchLower = searchQuery.toLowerCase();
-      return (
-        !searchQuery ||
-        task.title.toLowerCase().includes(searchLower) ||
-        task.description.toLowerCase().includes(searchLower)
-      );
-    });
-
-    // Then filter by tab
-    switch (selectedTab) {
-      case 'today':
-        return filteredTasks.filter(task => {
-          if (task.completed || !task.dueDate) return false;
-          const taskDate = new Date(task.dueDate);
-          taskDate.setHours(0, 0, 0, 0);
-          return taskDate.getTime() === today.getTime();
-        });
-      case 'upcoming':
-        return filteredTasks.filter(task => {
-          if (task.completed || !task.dueDate) return false;
-          const taskDate = new Date(task.dueDate);
-          taskDate.setHours(0, 0, 0, 0);
-          return taskDate.getTime() > today.getTime();
-        });
-      case 'priority':
-        return filteredTasks.filter(task => !task.completed && task.priority === 'high');
-      case 'completed':
-        return filteredTasks.filter(task => task.completed);
-      default:
-        return filteredTasks.filter(task => !task.completed);
-    }
+  const handleAddTask = () => {
+    setSelectedTask(null);
+    setDrawerOpen(true);
   };
 
   return (
-    <ThemeProvider theme={theme}>
-      <LocalizationProvider dateAdapter={AdapterDateFns}>
-        <CssBaseline />
-        <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-          <Sidebar
-            darkMode={darkMode}
-            setDarkMode={handleThemeChange}
-            onCreateTask={() => setIsFormOpen(true)}
-            selectedTab={selectedTab}
-            setSelectedTab={setSelectedTab}
-          />
-          <Box
-            component="main"
-            sx={{
-              flexGrow: 1,
-              height: '100vh',
-              overflow: 'hidden',
-              display: 'flex',
-              flexDirection: 'column',
-            }}
-          >
-            <TitleBar />
-            <Box
-              sx={{
-                flexGrow: 1,
-                p: 3,
-                backgroundColor: theme.palette.background.default,
-                overflow: 'auto',
-              }}
-            >
-              <TaskList
-                tasks={getFilteredTasks()}
-                loading={loading}
-                onSelectTask={(task) => {
-                  setSelectedTask(task);
-                  setIsFormOpen(true);
-                }}
-                onDeleteTask={handleDeleteTask}
-                onToggleComplete={handleToggleComplete}
-                onSearch={setSearchQuery}
+    <ErrorBoundary>
+      <ThemeProvider theme={theme}>
+        <LocalizationProvider dateAdapter={AdapterDateFns}>
+          <CssBaseline />
+          
+          <Box sx={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            height: '100vh',
+            bgcolor: 'background.default',
+            overflow: 'hidden',
+          }}>
+            <TitleBar 
+              darkMode={darkMode} 
+              onThemeToggle={() => setDarkMode(!darkMode)} 
+            />
+            
+            <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+              <Sidebar
+                selectedTab={selectedTab}
+                onTabChange={setSelectedTab}
+                onSearchChange={setSearchQuery}
                 searchQuery={searchQuery}
+                onAddTask={handleAddTask}
               />
-            </Box>
-          </Box>
-          <AnimatePresence>
-            {isFormOpen && (
-              <TaskForm
-                key="task-form"
-                task={selectedTask}
-                onSubmit={selectedTask ? handleUpdateTask : handleCreateTask}
-                onClose={() => {
-                  setIsFormOpen(false);
-                  setSelectedTask(null);
+              
+              <Box
+                component={motion.main}
+                layout
+                sx={{
+                  flex: 1,
+                  overflow: 'hidden',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  p: 2,
                 }}
-              />
-            )}
-          </AnimatePresence>
-        </Box>
-      </LocalizationProvider>
-    </ThemeProvider>
+              >
+                <Box 
+                  sx={{ 
+                    display: 'flex', 
+                    justifyContent: 'flex-end',
+                    mb: 2 
+                  }}
+                >
+                  <FormControl size="small">
+                    <Select
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value)}
+                      displayEmpty
+                      startAdornment={
+                        <InputAdornment position="start">
+                          <SortIcon />
+                        </InputAdornment>
+                      }
+                    >
+                      <MenuItem value="">Default Order</MenuItem>
+                      <MenuItem value="priority">Priority (High → Low)</MenuItem>
+                      <MenuItem value="dueDate">Due Date (Earliest First)</MenuItem>
+                      <MenuItem value="name">Name (A to Z)</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Box>
+
+                <TaskList
+                  tasks={tasks}
+                  loading={loading}
+                  selectedTab={selectedTab}
+                  searchQuery={searchQuery}
+                  sortBy={sortBy}
+                  onTaskClick={handleTaskClick}
+                  onTaskToggle={toggleTaskCompletion}
+                  onTaskDelete={handleDeleteTask}
+                />
+              </Box>
+
+              <AnimatePresence mode="wait">
+                {drawerOpen && (
+                  <Box
+                    component={motion.div}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    sx={{
+                      position: 'fixed',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      bgcolor: 'rgba(0, 0, 0, 0.5)',
+                      zIndex: 1200,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      p: 3,
+                    }}
+                  >
+                    <TaskForm
+                      key="task-form"
+                      task={selectedTask}
+                      onSubmit={handleSaveTask}
+                      onClose={handleDrawerClose}
+                      onDelete={handleDeleteTask}
+                    />
+                  </Box>
+                )}
+              </AnimatePresence>
+            </Box>
+            
+            <UpdateNotification />
+          </Box>
+        </LocalizationProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }
 

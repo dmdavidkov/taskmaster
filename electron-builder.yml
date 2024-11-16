@@ -1,0 +1,30 @@
+appId: com.taskmaster.app
+productName: TaskMaster
+directories:
+  buildResources: assets
+  output: dist
+files:
+  - "build/**/*"
+win:
+  target: 
+    - target: nsis
+      arch: x64
+  icon: assets/icon.ico
+  signAndEditExecutable: false
+  signDlls: false
+  artifactName: "${productName}.Setup.${version}.${ext}"
+nsis:
+  oneClick: true
+  perMachine: false
+  allowToChangeInstallationDirectory: false
+  createDesktopShortcut: true
+  runAfterFinish: true
+publish:
+  provider: github
+  owner: dmdavidkov
+  repo: taskmaster
+  releaseType: release
+  private: false
+  publishAutoUpdate: true
+asar: true
+electronVersion: 25.9.8

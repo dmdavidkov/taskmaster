@@ -1,86 +1,97 @@
 {
-  "name": "task-master",
-  "version": "1.0.0",
-  "description": "A modern and beautiful task management application",
-  "main": "./main.js",
+  "name": "taskmaster",
+  "version": "1.0.1",
+  "main": "build/electron.js",
   "homepage": "./",
-  "author": "TaskMaster",
+  "author": {
+    "name": "Dimitar Davidkov",
+    "email": "dmdavidkov@gmail.com"
+  },
+  "description": "TaskMaster - A powerful task management application",
+  "dependencies": {
+    "@emotion/react": "^11.11.1",
+    "@emotion/styled": "^11.11.0",
+    "@mui/icons-material": "^5.14.16",
+    "@mui/material": "^5.14.17",
+    "@mui/x-date-pickers": "^6.18.1",
+    "@testing-library/jest-dom": "^5.17.0",
+    "@testing-library/react": "^13.4.0",
+    "@testing-library/user-event": "^13.5.0",
+    "date-fns": "^2.30.0",
+    "electron-is-dev": "^2.0.0",
+    "electron-log": "^5.0.0",
+    "electron-store": "^8.1.0",
+    "electron-updater": "^6.1.4",
+    "framer-motion": "^10.16.5",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-scripts": "5.0.1",
+    "uuid": "^9.0.0",
+    "web-vitals": "^2.1.4"
+  },
+  "devDependencies": {
+    "@babel/plugin-proposal-private-property-in-object": "^7.21.11",
+    "@craco/craco": "^7.1.0",
+    "buffer": "^6.0.3",
+    "concurrently": "^8.2.2",
+    "copyfiles": "^2.4.1",
+    "cross-env": "^7.0.3",
+    "crypto-browserify": "^3.12.1",
+    "electron": "^25.3.1",
+    "electron-builder": "^24.6.3",
+    "electron-is-dev": "^2.0.0",
+    "https-browserify": "^1.0.0",
+    "os-browserify": "^0.3.0",
+    "path-browserify": "^1.0.1",
+    "process": "^0.11.10",
+    "rimraf": "^6.0.1",
+    "stream-browserify": "^3.0.0",
+    "stream-http": "^3.2.0",
+    "wait-on": "^7.2.0"
+  },
   "scripts": {
     "start": "craco start",
     "build": "craco build",
     "test": "craco test",
     "eject": "react-scripts eject",
-    "electron": "electron .",
-    "dev": "concurrently \"cross-env BROWSER=none npm start\" \"wait-on tcp:3000 && electron .\"",
+    "electron": "cross-env NODE_ENV=development ELECTRON_START_URL=http://localhost:3000 electron electron/main.js",
+    "react-start": "cross-env BROWSER=none NODE_ENV=development craco start",
+    "dev": "concurrently -k \"cross-env BROWSER=none npm run react-start\" \"wait-on tcp:3000 && npm run electron\"",
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder",
-    "make-win": "npm run build && electron-builder --win portable",
-    "make-installer": "npm run build && electron-builder --win nsis"
-  },
-  "dependencies": {
-    "@emotion/react": "^11.11.1",
-    "@emotion/styled": "^11.11.0",
-    "@mui/icons-material": "^5.14.3",
-    "@mui/material": "^5.14.5",
-    "@mui/x-date-pickers": "^6.11.0",
-    "date-fns": "^2.30.0",
-    "electron-is-dev": "^2.0.0",
-    "electron-store": "^8.1.0",
-    "framer-motion": "^10.16.4",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-scripts": "5.0.1",
-    "uuid": "^9.0.0"
-  },
-  "devDependencies": {
-    "@babel/plugin-proposal-private-property-in-object": "^7.21.11",
-    "@craco/craco": "^7.1.0",
-    "concurrently": "^8.2.2",
-    "cross-env": "^7.0.3",
-    "electron": "^25.3.1",
-    "electron-builder": "^24.6.3",
-    "electron-is-dev": "^3.0.1",
-    "wait-on": "^7.2.0"
+    "prebuild": "rimraf build",
+    "make-win": "npm run build && npm run copy-electron && electron-builder -w",
+    "make-installer": "npm run build && npm run copy-electron && electron-builder --win --x64 --config electron-builder.yml",
+    "copy-electron": "powershell Copy-Item electron/main.js build/electron.js -Force; Copy-Item electron/preload.js build/preload.js -Force",
+    "postinstall": "electron-builder install-app-deps"
   },
   "build": {
     "appId": "com.taskmaster.app",
     "productName": "TaskMaster",
-    "files": [
-      "build/**/*",
-      "main.js",
-      "package.json"
-    ],
     "directories": {
       "buildResources": "assets",
       "output": "dist"
     },
+    "files": [
+      "build/**/*"
+    ],
     "win": {
       "target": [
-        "nsis",
-        "portable"
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
       ],
-      "icon": "assets/icon.ico",
-      "signAndEditExecutable": false
+      "artifactName": "${productName}.Setup.${version}.${ext}"
     },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "TaskMaster",
-      "uninstallDisplayName": "TaskMaster",
-      "artifactName": "TaskMaster-Setup-${version}.${ext}",
-      "include": "installer.nsh"
-    },
-    "extraMetadata": {
-      "main": "./main.js"
-    },
-    "asar": true,
-    "forceCodeSigning": false,
-    "compression": "maximum",
-    "removePackageScripts": true,
-    "removePackageKeywords": true,
-    "buildDependenciesFromSource": false
+    "publish": {
+      "provider": "github",
+      "owner": "dmdavidkov",
+      "repo": "taskmaster",
+      "releaseType": "release",
+      "private": false,
+      "publishAutoUpdate": true
+    }
   },
   "browserslist": {
     "production": [
