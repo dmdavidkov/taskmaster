@@ -2,7 +2,7 @@
 
 A beautiful and responsive task management application built with Electron and React. TaskMaster helps you organize your work and life with a clean, modern interface and powerful features.
 
-![TaskMaster Screenshot](assets/screenshot.png)
+![TaskMaster Screenshot](assets/Screenshot.png)
 
 ## Features
 
