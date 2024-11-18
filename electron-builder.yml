@@ -5,6 +5,27 @@ directories:
   output: dist
 files:
   - "build/**/*"
+  - "package.json"
+  - "!**/*.map"
+  - "!**/*.d.ts"
+  - "!node_modules/**/*.{md,markdown,MD}"
+  - "!node_modules/**/{test,__tests__,tests,powered-test,example,examples}"
+  - "!node_modules/.bin"
+  - "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}"
+  - "!.editorconfig"
+  - "!**/._*"
+  - "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,__pycache__,thumbs.db,.gitignore,.gitattributes,.flowconfig,.yarn-metadata.json,.idea,appveyor.yml,.travis.yml,circle.yml,npm-debug.log,.nyc_output,yarn.lock,yarn-error.log}"
+asar: true
+compression: maximum
+removePackageScripts: true
+extraResources:
+  - from: "node_modules/electron-updater"
+    to: "app.asar.unpacked/node_modules/electron-updater"
+  - from: "node_modules/electron-store"
+    to: "app.asar.unpacked/node_modules/electron-store"
+  - from: "node_modules/electron-log"
+    to: "app.asar.unpacked/node_modules/electron-log"
+electronUpdaterCompatibility: ">=2.16"
 win:
   target: 
     - target: nsis
@@ -12,19 +33,6 @@ win:
   icon: assets/icon.ico
   signAndEditExecutable: false
   signDlls: false
-  artifactName: "${productName}.Setup.${version}.${ext}"
 nsis:
   oneClick: true
   perMachine: false
-  allowToChangeInstallationDirectory: false
-  createDesktopShortcut: true
-  runAfterFinish: true
-publish:
-  provider: github
-  owner: dmdavidkov
-  repo: taskmaster
-  releaseType: release
-  private: false
-  publishAutoUpdate: true
-asar: true
-electronVersion: 25.9.8

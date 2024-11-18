@@ -20,6 +20,7 @@ import MenuItem from '@mui/material/MenuItem';
 import SortIcon from '@mui/icons-material/Sort';
 import Button from '@mui/material/Button';
 import AddIcon from '@mui/icons-material/Add';
+import { bg } from 'date-fns/locale';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -194,7 +195,7 @@ function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider theme={theme}>
-        <LocalizationProvider dateAdapter={AdapterDateFns}>
+        <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={bg}>
           <CssBaseline />
           
           <Box sx={{ 

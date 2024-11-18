@@ -1,25 +1,25 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
-const isDev = require('electron-is-dev');
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
-
-// Configure logging
-log.transports.file.level = 'debug';
-autoUpdater.logger = log;
-autoUpdater.logger.transports.file.level = 'debug';
-log.info('Application Starting...');
-log.info('Environment:', isDev ? 'Development' : 'Production');
-
-// Initialize electron store
 const Store = require('electron-store');
 const store = new Store();
 
-// Get package.json for app version
-const packageJson = require('../package.json');
-
 let mainWindow;
 let updateCheckInProgress = false;
+
+// Check if we're in development mode
+const isDev = process.env.NODE_ENV === 'development';
+
+// Configure logging only in development
+if (isDev) {
+  log.transports.file.level = 'debug';
+  autoUpdater.logger = log;
+  autoUpdater.logger.transports.file.level = 'debug';
+}
+
+// Get package.json for app version
+const packageJson = require('../package.json');
 
 function createWindow() {
   // Create the browser window.
@@ -31,8 +31,13 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       webSecurity: true,
-      preload: path.join(__dirname, 'preload.js')
+      preload: path.join(__dirname, 'preload.js'),
+      backgroundThrottling: true,
+      enableWebSQL: false,
+      spellcheck: false,
+      v8CacheOptions: 'bypassHeatCheck'
     },
+    backgroundColor: '#ffffff',
   });
 
   // Remove the menu bar completely
@@ -56,6 +61,13 @@ function createWindow() {
   if (isDev) {
     mainWindow.webContents.openDevTools();
   }
+
+  // Optimize memory usage
+  mainWindow.on('minimize', () => {
+    if (!isDev) {
+      mainWindow.webContents.session.clearCache();
+    }
+  });
 
   // Handle window closed
   mainWindow.on('closed', () => {

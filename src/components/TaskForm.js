@@ -7,7 +7,7 @@ import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import CloseIcon from '@mui/icons-material/Close';
 import MenuItem from '@mui/material/MenuItem';
-import { DateTimePicker } from '@mui/x-date-pickers';
+import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { motion, AnimatePresence } from 'framer-motion';
 import Typography from '@mui/material/Typography';
 
@@ -174,9 +174,9 @@ const TaskForm = ({
               label="Due Date"
               value={formData.dueDate}
               onChange={handleDateChange}
-              renderInput={(params) => <TextField {...params} fullWidth />}
+              slotProps={{ textField: { fullWidth: true } }}
               minDate={new Date()}
-              clearable
+              format="Pp"
             />
 
             <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 2 }}>
