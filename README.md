@@ -16,6 +16,40 @@ A beautiful and responsive task management application built with Electron and R
 - Responsive design
 - Fast and efficient
 - Auto-updates support
+- Voice-to-Text with Whisper AI model
+
+## Voice-to-Text with Whisper
+
+TaskMaster integrates the Whisper large-v3-turbo model for powerful voice-to-text capabilities. This feature allows you to dictate your tasks using your voice, making task creation faster and more convenient.
+
+### Setting Up Voice Input
+
+1. Go to Settings (bottom left corner)
+2. Navigate to the "Voice Input" tab
+3. Under "Whisper Configuration", you can:
+   - Select your preferred model version 
+   - Configure model parameters (keep on default for now)
+   - Choose your preferred language
+4. Click "Initialize Model" to load the Whisper model
+   > Note: Initial model loading may take a few moments depending on your internet connection
+5. Click "Test Speech Recognition" to test the voice-to-text functionality
+   > If the model is loaded and the test works, you can now use voice input to create tasks
+
+### Using Voice Input
+
+1. When creating or editing a task, look for the microphone icon (🎤) next to text fields
+2. Click the microphone icon to start recording
+3. Speak clearly into your microphone
+4. Click the stop icon (⏹️) to end recording
+5. The Whisper model will process your speech and convert it to text
+6. Review and edit the transcribed text if needed
+
+### Performance Considerations
+
+- The model runs locally in your browser using WebGPU acceleration
+- First-time initialization requires downloading the model
+- Transcription works offline once the model is loaded
+- Processing time varies based on the length of the recording and the hardware capabilities of your device
 
 ## Installation
 
