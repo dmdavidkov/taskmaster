@@ -13,7 +13,7 @@ const useWhisperStore = create(
       hasCompletedSetup: false, // Track if user has completed initial setup
       modelConfig: {
         encoderModel: localStorage.getItem('whisperEncoderModel') || 'q4',
-        decoderModel: localStorage.getItem('whisperDecoderModel') || 'q4',
+        decoderModel: localStorage.getItem('whisperDecoderModel') || 'fp32',
         modelId: localStorage.getItem('whisperModelId') || 'onnx-community/whisper-large-v3-turbo',
       },
       
