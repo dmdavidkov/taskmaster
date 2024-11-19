@@ -58,10 +58,6 @@ TaskMaster integrates the Whisper large-v3-turbo model for powerful voice-to-tex
 
 1. Download the latest installer from the [Releases](../../releases) page
 2. Run the installer (`TaskMaster Setup.exe`)
-   > **Note about Security Warnings**: When running the installer or application, you might see a warning from Windows Defender or your antivirus software. This is a false positive that occurs with many Electron applications. The application is safe to use, and you can verify this by:
-   > - Checking our source code on GitHub
-   > - Clicking "More info" and then "Run anyway" in Windows SmartScreen
-   > - Reading the `IMPORTANT_README.txt` file in your installation directory
 3. Follow the installation wizard
 4. Launch TaskMaster from your desktop or start menu
 
