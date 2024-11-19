@@ -19,6 +19,8 @@ import {
   Paper,
   CircularProgress,
   Alert,
+  TextField,
+  MenuItem,
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
@@ -62,6 +64,11 @@ function TabPanel({ children, value, index, ...other }) {
   );
 }
 
+const languageOptions = [
+  { value: 'en', label: 'English' },
+  { value: 'bg', label: 'Bulgarian' }
+];
+
 const Settings = ({ open, onClose }) => {
   const [currentTab, setCurrentTab] = React.useState(0);
   const [darkMode, setDarkMode] = React.useState(false);
@@ -75,8 +82,16 @@ const Settings = ({ open, onClose }) => {
   const [recordingStream, setRecordingStream] = React.useState(null);
   const [audioChunks, setAudioChunks] = React.useState([]);
   const [isModelReady, setIsModelReady] = React.useState(false);
+  const [selectedLanguage, setSelectedLanguage] = React.useState('en');
   const whisperWorkerRef = React.useRef(null);
   const recorderRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const savedLanguage = localStorage.getItem('whisperLanguage');
+    if (savedLanguage) {
+      setSelectedLanguage(savedLanguage);
+    }
+  }, []);
 
   React.useEffect(() => {
     whisperWorkerRef.current = new Worker(
@@ -204,10 +219,11 @@ const Settings = ({ open, onClose }) => {
       
       setAudioChunks([]);
       
+      console.log('Testing speech recognition with language:', selectedLanguage); // Debug log
       whisperWorkerRef.current.postMessage({ 
         type: 'transcribe',
         audio: audioData,
-        language: 'en',
+        language: selectedLanguage,
       });
 
       await processingContext.close();
@@ -240,7 +256,7 @@ const Settings = ({ open, onClose }) => {
   };
 
   const handleSave = () => {
-    // TODO: Save settings
+    localStorage.setItem('whisperLanguage', selectedLanguage);
     onClose();
   };
 
@@ -344,6 +360,21 @@ const Settings = ({ open, onClose }) => {
             Whisper Speech Recognition
           </Typography>
           <Box sx={{ mb: 3 }}>
+            <TextField
+              select
+              label="Recognition Language"
+              value={selectedLanguage}
+              onChange={(e) => setSelectedLanguage(e.target.value)}
+              fullWidth
+              sx={{ mb: 2 }}
+              helperText={`Currently set to ${languageOptions.find(opt => opt.value === selectedLanguage)?.label}`}
+            >
+              {languageOptions.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </TextField>
             <Button
               variant="contained"
               onClick={handleLoadWhisperModel}
@@ -366,7 +397,7 @@ const Settings = ({ open, onClose }) => {
               color={isRecording ? "error" : "primary"}
               startIcon={whisperLoading ? <CircularProgress size={20} /> : isRecording ? <StopIcon /> : <MicIcon />}
             >
-              {whisperLoading ? loadingMessage : isRecording ? 'Stop Recording' : 'Test Speech Recognition'}
+              {whisperLoading ? loadingMessage : isRecording ? 'Stop Recording' : `Test Speech Recognition (${languageOptions.find(opt => opt.value === selectedLanguage)?.label})`}
             </Button>
             {whisperError && (
               <Alert severity="error" sx={{ mt: 2 }}>
