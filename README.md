@@ -27,7 +27,7 @@ TaskMaster integrates the Whisper large-v3-turbo model for powerful voice-to-tex
 1. Go to Settings (bottom left corner)
 2. Navigate to the "Voice Input" tab
 3. Under "Whisper Configuration", you can:
-   - Select your preferred model version 
+   - Select your preferred model version (large-v3-turbo is the best choice, but you can try smaller for faster processing) 
    - Configure model parameters (keep on default for now)
    - Choose your preferred language
 4. Click "Initialize Model" to load the Whisper model
