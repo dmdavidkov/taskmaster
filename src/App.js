@@ -82,10 +82,16 @@ function App() {
   });
   
   const [selectedTask, setSelectedTask] = useState(null);
-  const [selectedTab, setSelectedTab] = useState('all');
+  const [selectedTab, setSelectedTab] = useState(() => {
+    const stored = localStorage.getItem('selectedTab');
+    return stored ? JSON.parse(stored) : 'all';
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [sortBy, setSortBy] = useState('');
+  const [sortBy, setSortBy] = useState(() => {
+    const stored = localStorage.getItem('sortBy');
+    return stored ? JSON.parse(stored) : '';
+  });
   const { tasks, loading, createTask, updateTask, deleteTask, toggleTaskCompletion } = useTaskStore();
 
   useEffect(() => {
@@ -105,6 +111,14 @@ function App() {
   useEffect(() => {
     localStorage.setItem('darkMode', JSON.stringify(darkMode));
   }, [darkMode]);
+
+  useEffect(() => {
+    localStorage.setItem('selectedTab', JSON.stringify(selectedTab));
+  }, [selectedTab]);
+
+  useEffect(() => {
+    localStorage.setItem('sortBy', JSON.stringify(sortBy));
+  }, [sortBy]);
 
   const theme = createTheme({
     palette: {
