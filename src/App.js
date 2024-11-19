@@ -21,6 +21,7 @@ import SortIcon from '@mui/icons-material/Sort';
 import Button from '@mui/material/Button';
 import AddIcon from '@mui/icons-material/Add';
 import { bg } from 'date-fns/locale';
+import { initializeApp } from './init';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -86,6 +87,11 @@ function App() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [sortBy, setSortBy] = useState('');
   const { tasks, loading, createTask, updateTask, deleteTask, toggleTaskCompletion } = useTaskStore();
+
+  useEffect(() => {
+    // Initialize app when component mounts
+    initializeApp();
+  }, []);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');

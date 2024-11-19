@@ -16,7 +16,15 @@ class AutomaticSpeechRecognitionPipeline {
     static chunk_length_s = 30;
     static stride_length_s = 5;
 
-    static async getInstance(progress_callback = null) {
+    static async getInstance(progress_callback = null, config = null) {
+        // Reset all instances if config is provided
+        if (config) {
+            this.tokenizer = null;
+            this.processor = null;
+            this.model = null;
+            this.model_id = config.model_id;
+        }
+
         this.tokenizer ??= AutoTokenizer.from_pretrained(this.model_id, {
             progress_callback,
         });
@@ -27,10 +35,16 @@ class AutomaticSpeechRecognitionPipeline {
             sampling_rate: SAMPLING_RATE,
         });
 
-        this.model ??= WhisperForConditionalGeneration.from_pretrained(this.model_id, {
+        const modelConfig = config || {
+            encoder_model: 'q4',
+            decoder_model_merged: 'q4',
+            model_id: this.model_id
+        };
+
+        this.model ??= WhisperForConditionalGeneration.from_pretrained(modelConfig.model_id, {
             dtype: {
-                encoder_model: 'q4',
-                decoder_model_merged: 'q4',
+                encoder_model: modelConfig.encoder_model,
+                decoder_model_merged: modelConfig.decoder_model_merged,
             },
             device: 'webgpu',
             progress_callback,
@@ -38,16 +52,24 @@ class AutomaticSpeechRecognitionPipeline {
 
         return Promise.all([this.tokenizer, this.processor, this.model]);
     }
+
+    static reset() {
+        this.tokenizer = null;
+        this.processor = null;
+        this.model = null;
+        this.model_id = 'onnx-community/whisper-large-v3-turbo';
+    }
 }
 
 let processing = false;
+let pipeline = null;
 
-async function transcribe(audio, language) {
+async function transcribe(audio, language, config) {
     if (processing) return;
     processing = true;
 
     try {
-        const [tokenizer, processor, model] = await AutomaticSpeechRecognitionPipeline.getInstance();
+        const [tokenizer, processor, model] = await AutomaticSpeechRecognitionPipeline.getInstance(null, config);
 
         // Process audio through the processor
         const inputs = await processor(audio, {
@@ -82,7 +104,7 @@ async function transcribe(audio, language) {
     }
 }
 
-async function load() {
+async function load(config) {
     try {
         let loadProgress = 0;
         const updateProgress = () => {
@@ -93,7 +115,7 @@ async function load() {
             });
         };
 
-        const [tokenizer, processor, model] = await AutomaticSpeechRecognitionPipeline.getInstance(updateProgress);
+        const [tokenizer, processor, model] = await AutomaticSpeechRecognitionPipeline.getInstance(updateProgress, config);
         
         // Warm up the model with dummy input
         self.postMessage({
@@ -131,15 +153,15 @@ async function load() {
     }
 }
 
-self.addEventListener('message', async (e) => {
-    const { type, audio, language } = e.data;
+self.onmessage = async (e) => {
+    const { type, audio, language, config } = e.data;
 
     switch (type) {
         case 'load':
-            await load();
+            await load(config);
             break;
         case 'transcribe':
-            await transcribe(audio, language);
+            await transcribe(audio, language, config);
             break;
     }
-});
+};

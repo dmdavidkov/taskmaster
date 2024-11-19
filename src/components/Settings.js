@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -21,6 +21,11 @@ import {
   Alert,
   TextField,
   MenuItem,
+  FormControl,
+  InputLabel,
+  Select,
+  FormGroup,
+  FormHelperText
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
@@ -29,20 +34,61 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import StopIcon from '@mui/icons-material/Stop';
 import MicIcon from '@mui/icons-material/Mic';
 
+import useWhisperStore from '../stores/whisperStore';
+
 const StyledDialog = styled(Dialog)(({ theme }) => ({
   '& .MuiDialog-paper': {
-    width: '100%',
-    maxWidth: 600,
+    width: '90vw',
+    maxWidth: '800px',
+    minWidth: '600px',
+    height: '80vh',
+    maxHeight: '900px',
+    minHeight: '600px',
     backgroundColor: theme.palette.background.paper,
+    display: 'flex',
+    flexDirection: 'column',
+    [theme.breakpoints.down('sm')]: {
+      width: '95vw',
+      minWidth: 'auto',
+      height: '90vh',
+      minHeight: 'auto',
+      margin: theme.spacing(1),
+    },
+  },
+  '& .MuiDialogTitle-root': {
+    padding: theme.spacing(2, 3),
+    borderBottom: `1px solid ${theme.palette.divider}`,
   },
   '& .MuiDialogContent-root': {
-    scrollbarWidth: 'none',  // Firefox
-    '&::-webkit-scrollbar': {
-      display: 'none'  // Chrome, Safari, Edge
-    },
-    msOverflowStyle: 'none',  // IE, Edge
+    flex: 1,
     overflowY: 'auto',
-    paddingRight: theme.spacing(3),
+    padding: theme.spacing(3),
+    '&::-webkit-scrollbar': {
+      width: '8px',
+      backgroundColor: 'transparent',
+    },
+    '&::-webkit-scrollbar-thumb': {
+      backgroundColor: theme.palette.mode === 'dark' 
+        ? 'rgba(255, 255, 255, 0.2)' 
+        : 'rgba(0, 0, 0, 0.2)',
+      borderRadius: '4px',
+      '&:hover': {
+        backgroundColor: theme.palette.mode === 'dark'
+          ? 'rgba(255, 255, 255, 0.3)'
+          : 'rgba(0, 0, 0, 0.3)',
+      },
+    },
+    '&::-webkit-scrollbar-track': {
+      backgroundColor: 'transparent',
+    },
+    scrollbarWidth: 'thin',
+    scrollbarColor: `${theme.palette.mode === 'dark' 
+      ? 'rgba(255, 255, 255, 0.2)' 
+      : 'rgba(0, 0, 0, 0.2)'} transparent`,
+  },
+  '& .MuiDialogActions-root': {
+    padding: theme.spacing(2, 3),
+    borderTop: `1px solid ${theme.palette.divider}`,
   }
 }));
 
@@ -64,95 +110,178 @@ function TabPanel({ children, value, index, ...other }) {
   );
 }
 
-const languageOptions = [
-  { value: 'en', label: 'English' },
-  { value: 'bg', label: 'Bulgarian' }
-];
+// Model configuration options
+const MODEL_OPTIONS = {
+  models: [
+    { 
+      value: 'onnx-community/whisper-large-v3-turbo', 
+      label: 'Whisper Large V3 Turbo',
+      description: 'Best performance, largest model'
+    },
+    { 
+      value: 'onnx-community/whisper-base', 
+      label: 'Whisper Base',
+      description: 'Balanced performance and speed'
+    },
+    { 
+      value: 'onnx-community/whisper-small', 
+      label: 'Whisper Small',
+      description: 'Fast, average accuracy'
+    },
+    { 
+      value: 'onnx-community/whisper-tiny', 
+      label: 'Whisper Tiny',
+      description: 'Fastest, lower accuracy'
+    }
+  ],
+  quantization: [
+    {
+      value: 'fp32',
+      label: 'FP32 (Most Accurate)',
+      description: 'Highest accuracy, slowest processing'
+    },
+    {
+      value: 'fp16',
+      label: 'FP16 (Accurate)',
+      description: 'High accuracy, slower processing'
+    },
+    {
+      value: 'q8',
+      label: 'Q8 (Balanced)',
+      description: 'Good balance of speed and accuracy'
+    },
+    {
+      value: 'int8',
+      label: 'INT8 (Fast)',
+      description: 'Fast processing, reduced accuracy'
+    },
+    {
+      value: 'uint8',
+      label: 'UINT8 (Fast)',
+      description: 'Fast processing, reduced accuracy'
+    },
+    {
+      value: 'q4',
+      label: 'Q4 (Faster)',
+      description: 'Faster inference, smaller size, lower accuracy'
+    },
+    {
+      value: 'bnb4',
+      label: 'BNB4 (Optimized)',
+      description: 'Optimized for specific hardware, balance of speed and accuracy'
+    },
+    {
+      value: 'q4f16',
+      label: 'Q4F16 (Hybrid)',
+      description: 'Hybrid of Q4 and FP16, balancing speed and accuracy'
+    }
+  ]
+};
+
+// Language options with ISO codes
+const LANGUAGE_OPTIONS = [
+  { value: 'en', label: 'English', nativeName: 'English' },
+  { value: 'bg', label: 'Bulgarian', nativeName: 'български' },
+  { value: 'es', label: 'Spanish', nativeName: 'Español' },
+  { value: 'fr', label: 'French', nativeName: 'Français' },
+  { value: 'de', label: 'German', nativeName: 'Deutsch' },
+  { value: 'it', label: 'Italian', nativeName: 'Italiano' },
+  { value: 'pt', label: 'Portuguese', nativeName: 'Português' },
+  { value: 'ru', label: 'Russian', nativeName: 'Русский' },
+  { value: 'zh', label: 'Chinese', nativeName: '中文' },
+  { value: 'ja', label: 'Japanese', nativeName: '日本語' }
+].sort((a, b) => a.label.localeCompare(b.label));
+
+// General settings options
+const GENERAL_SETTINGS = {
+  themes: [
+    { value: 'light', label: 'Light' },
+    { value: 'dark', label: 'Dark' },
+    { value: 'system', label: 'System' }
+  ],
+  notifications: [
+    { value: 'all', label: 'All Notifications' },
+    { value: 'important', label: 'Important Only' },
+    { value: 'none', label: 'None' }
+  ]
+};
 
 const Settings = ({ open, onClose }) => {
+  const { 
+    initializeWorker,
+    loadModel,
+    transcribe,
+    isModelLoaded,
+    isLoading: whisperLoading,
+    error: whisperError,
+    loadingProgress,
+    hasCompletedSetup,
+    resetSetup,
+    modelConfig,
+    updateModelConfig,
+    cleanup
+  } = useWhisperStore();
+  
   const [currentTab, setCurrentTab] = React.useState(0);
+  const [showSetupGuide, setShowSetupGuide] = React.useState(!hasCompletedSetup);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingStream, setRecordingStream] = useState(null);
+  const [audioChunks, setAudioChunks] = useState([]);
+  const [transcriptionResult, setTranscriptionResult] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const recorderRef = React.useRef(null);
+  const [autoLoadModel, setAutoLoadModel] = useState(localStorage.getItem('autoLoadWhisperModel') === 'true');
   const [darkMode, setDarkMode] = React.useState(false);
   const [notifications, setNotifications] = React.useState(true);
   const [autoStart, setAutoStart] = React.useState(false);
-  const [whisperLoading, setWhisperLoading] = React.useState(false);
-  const [whisperError, setWhisperError] = React.useState(null);
-  const [loadingProgress, setLoadingProgress] = React.useState(0);
-  const [loadingMessage, setLoadingMessage] = React.useState('');
-  const [isRecording, setIsRecording] = React.useState(false);
-  const [recordingStream, setRecordingStream] = React.useState(null);
-  const [audioChunks, setAudioChunks] = React.useState([]);
-  const [isModelReady, setIsModelReady] = React.useState(false);
   const [selectedLanguage, setSelectedLanguage] = React.useState('en');
-  const whisperWorkerRef = React.useRef(null);
-  const recorderRef = React.useRef(null);
 
-  React.useEffect(() => {
-    const savedLanguage = localStorage.getItem('whisperLanguage');
-    if (savedLanguage) {
-      setSelectedLanguage(savedLanguage);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    whisperWorkerRef.current = new Worker(
-      new URL('../workers/whisperWorker.js', import.meta.url),
-      { type: 'module' }
-    );
-
-    whisperWorkerRef.current.onmessage = (e) => {
-      const { status, error, progress, message, text } = e.data;
-      
-      switch (status) {
-        case 'loading':
-          setWhisperLoading(true);
-          setIsModelReady(false);
-          setLoadingMessage(message || 'Loading model...');
-          break;
-        case 'progress':
-          setLoadingProgress(progress || 0);
-          setLoadingMessage(message || 'Loading model...');
-          break;
-        case 'ready':
-          setWhisperLoading(false);
-          setIsModelReady(true);
-          setLoadingProgress(100);
-          setLoadingMessage('Model ready');
-          break;
-        case 'complete':
-          setWhisperLoading(false);
-          setLoadingMessage('Transcription complete');
-          alert('Transcription: ' + text);
-          break;
-        case 'error':
-          console.error('Worker error:', error);
-          setWhisperError(error);
-          setWhisperLoading(false);
-          setIsModelReady(false);
-          break;
-      }
-    };
-
-    return () => {
-      if (whisperWorkerRef.current) {
-        whisperWorkerRef.current.terminate();
-      }
-    };
-  }, []);
-
-  const handleLoadWhisperModel = async () => {
-    if (!navigator.gpu) {
-      setWhisperError('WebGPU is not available in your browser');
+  const handleClose = () => {
+    // Don't allow closing during model loading
+    if (whisperLoading) {
       return;
     }
     
-    setWhisperLoading(true);
-    setWhisperError(null);
-    setLoadingProgress(0);
-    setLoadingMessage('Initializing...');
-    whisperWorkerRef.current.postMessage({ type: 'load' });
+    // If we're closing and the model is still loading, clean up
+    if (!isModelLoaded && !whisperLoading) {
+      cleanup();
+    }
+    
+    onClose();
+  };
+
+  // Initialize worker when Settings is first opened and setup is not complete
+  useEffect(() => {
+    if (open && !hasCompletedSetup) {
+      initializeWorker();
+    }
+  }, [open, hasCompletedSetup, initializeWorker]);
+
+  const handleLoadWhisperModel = () => {
+    loadModel();
+  };
+
+  const handleAutoLoadChange = (event) => {
+    const newValue = event.target.checked;
+    setAutoLoadModel(newValue);
+    localStorage.setItem('autoLoadWhisperModel', newValue);
+    
+    // If turning on auto-load and model isn't loaded, load it now
+    if (newValue && hasCompletedSetup && !isModelLoaded && !whisperLoading) {
+      loadModel();
+    }
+  };
+
+  const handleResetSetup = () => {
+    if (window.confirm('Are you sure you want to reset Whisper setup? You will need to load the model again.')) {
+      resetSetup();
+      setShowSetupGuide(true);
+      setTranscriptionResult('');
+    }
   };
 
   const startRecording = async () => {
+    setTranscriptionResult('');
     let mediaStream = null;
     try {
       mediaStream = await navigator.mediaDevices.getUserMedia({ 
@@ -165,15 +294,9 @@ const Settings = ({ open, onClose }) => {
       });
       setRecordingStream(mediaStream);
       
-      let recorder;
-      try {
-        recorder = new MediaRecorder(mediaStream, {
-          mimeType: 'audio/webm;codecs=opus'
-        });
-      } catch (err) {
-        console.log('Falling back to default format');
-        recorder = new MediaRecorder(mediaStream);
-      }
+      const recorder = new MediaRecorder(mediaStream, {
+        mimeType: 'audio/webm;codecs=opus'
+      });
       
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
@@ -182,61 +305,51 @@ const Settings = ({ open, onClose }) => {
       };
       
       recorderRef.current = recorder;
-      recorder.start(1000); // Collect data every second
+      recorder.start(1000);
       setIsRecording(true);
-      setLoadingMessage('Recording...');
     } catch (err) {
       console.error('Error setting up audio:', err);
       if (mediaStream) {
         mediaStream.getTracks().forEach(track => track.stop());
       }
-      setWhisperError('Error accessing microphone. Please make sure microphone permissions are granted.');
     }
   };
 
-  const stopRecording = () => {
+  const stopRecording = async () => {
     if (recorderRef.current && recorderRef.current.state === 'recording') {
       recorderRef.current.stop();
       recordingStream?.getTracks().forEach(track => track.stop());
       setRecordingStream(null);
       setIsRecording(false);
-    }
-  };
-
-  const processRecording = async () => {
-    if (audioChunks.length === 0) return;
-    
-    setWhisperLoading(true);
-    setLoadingMessage('Processing audio...');
-    const currentChunks = [...audioChunks];
-    const audioBlob = new Blob(currentChunks, { type: 'audio/webm' });
-    
-    try {
-      const processingContext = new AudioContext({ sampleRate: 16000 });
-      const arrayBuffer = await audioBlob.arrayBuffer();
-      const audioBuffer = await processingContext.decodeAudioData(arrayBuffer);
-      const audioData = audioBuffer.getChannelData(0);
       
-      setAudioChunks([]);
+      // Process the recording
+      const currentChunks = [...audioChunks];
+      const audioBlob = new Blob(currentChunks, { type: 'audio/webm' });
       
-      console.log('Testing speech recognition with language:', selectedLanguage); // Debug log
-      whisperWorkerRef.current.postMessage({ 
-        type: 'transcribe',
-        audio: audioData,
-        language: selectedLanguage,
-      });
-
-      await processingContext.close();
-    } catch (err) {
-      console.error('Error processing audio:', err);
-      setWhisperError('Error processing audio. Please try again with a shorter recording.');
-      setWhisperLoading(false);
+      try {
+        setIsProcessing(true);
+        const processingContext = new AudioContext({ sampleRate: 16000 });
+        const arrayBuffer = await audioBlob.arrayBuffer();
+        const audioBuffer = await processingContext.decodeAudioData(arrayBuffer);
+        const audioData = audioBuffer.getChannelData(0);
+        
+        setAudioChunks([]);
+        
+        const text = await transcribe(audioData, selectedLanguage);
+        setTranscriptionResult(text);
+        
+        await processingContext.close();
+      } catch (err) {
+        console.error('Error processing audio:', err);
+      } finally {
+        setIsProcessing(false);
+      }
     }
   };
 
   const handleTestWhisper = async () => {
-    if (!isModelReady && !isRecording) {
-      setWhisperError('Please load the model first');
+    if (!isModelLoaded && !isRecording) {
+      whisperError('Please load the model first');
       return;
     }
 
@@ -245,9 +358,6 @@ const Settings = ({ open, onClose }) => {
       await startRecording();
     } else {
       stopRecording();
-      setTimeout(() => {
-        processRecording();
-      }, 100);
     }
   };
 
@@ -263,149 +373,299 @@ const Settings = ({ open, onClose }) => {
   return (
     <StyledDialog
       open={open}
-      onClose={onClose}
+      onClose={handleClose}
       aria-labelledby="settings-dialog-title"
       maxWidth="md"
       fullWidth
     >
-      <DialogTitle id="settings-dialog-title" sx={{ pb: 1 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h6" component="div">
-            Settings
-          </Typography>
-        </Box>
-        <Tabs 
-          value={currentTab} 
+      <DialogTitle sx={{ 
+        display: 'flex', 
+        alignItems: 'center',
+        gap: 1
+      }}>
+        <SettingsIcon /> Settings
+      </DialogTitle>
+      <DialogContent>
+        <Tabs
+          value={currentTab}
           onChange={handleTabChange}
           aria-label="settings tabs"
           variant="fullWidth"
+          sx={{ 
+            borderBottom: 1, 
+            borderColor: 'divider',
+            mb: 3,
+            '& .MuiTab-root': {
+              minHeight: 64,
+              fontSize: '0.9rem',
+            }
+          }}
         >
           <Tab 
             icon={<SettingsIcon />} 
             label="General" 
-            id="settings-tab-0"
-            aria-controls="settings-tabpanel-0"
+            iconPosition="start"
           />
           <Tab 
-            icon={<SmartToyIcon />} 
-            label="AI" 
-            id="settings-tab-1"
-            aria-controls="settings-tabpanel-1"
+            icon={<MicIcon />} 
+            label="Voice Input" 
+            iconPosition="start"
           />
           <Tab 
             icon={<HelpOutlineIcon />} 
             label="Help" 
-            id="settings-tab-2"
-            aria-controls="settings-tabpanel-2"
+            iconPosition="start"
           />
         </Tabs>
-      </DialogTitle>
-      <DialogContent dividers>
+
         <TabPanel value={currentTab} index={0}>
-          <List>
-            <ListItem>
-              <ListItemText 
-                primary="Dark Mode"
-                secondary="Enable dark theme for the application"
-              />
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={darkMode}
-                    onChange={(e) => setDarkMode(e.target.checked)}
-                    color="primary"
-                  />
-                }
-                label=""
-              />
-            </ListItem>
-            <Divider />
-            <ListItem>
-              <ListItemText
-                primary="Notifications"
-                secondary="Enable desktop notifications for tasks"
-              />
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={notifications}
-                    onChange={(e) => setNotifications(e.target.checked)}
-                    color="primary"
-                  />
-                }
-                label=""
-              />
-            </ListItem>
-            <Divider />
-            <ListItem>
-              <ListItemText
-                primary="Auto Start"
-                secondary="Start application on system startup"
-              />
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={autoStart}
-                    onChange={(e) => setAutoStart(e.target.checked)}
-                    color="primary"
-                  />
-                }
-                label=""
-              />
-            </ListItem>
-          </List>
-        </TabPanel>
-        <TabPanel value={currentTab} index={1}>
           <Typography variant="h6" gutterBottom>
-            Whisper Speech Recognition
+            Appearance
           </Typography>
-          <Box sx={{ mb: 3 }}>
-            <TextField
-              select
-              label="Recognition Language"
-              value={selectedLanguage}
-              onChange={(e) => setSelectedLanguage(e.target.value)}
-              fullWidth
-              sx={{ mb: 2 }}
-              helperText={`Currently set to ${languageOptions.find(opt => opt.value === selectedLanguage)?.label}`}
+          <FormControl fullWidth sx={{ mb: 3 }}>
+            <InputLabel id="theme-select-label">Theme</InputLabel>
+            <Select
+              labelId="theme-select-label"
+              label="Theme"
+              value={darkMode ? 'dark' : 'light'}
+              onChange={(e) => setDarkMode(e.target.value === 'dark')}
             >
-              {languageOptions.map((option) => (
+              {GENERAL_SETTINGS.themes.map(option => (
                 <MenuItem key={option.value} value={option.value}>
                   {option.label}
                 </MenuItem>
               ))}
-            </TextField>
+            </Select>
+            <FormHelperText>Choose your preferred appearance</FormHelperText>
+          </FormControl>
+
+          <Typography variant="h6" gutterBottom>
+            Notifications
+          </Typography>
+          <FormControl fullWidth sx={{ mb: 3 }}>
+            <InputLabel id="notifications-select-label">Notification Level</InputLabel>
+            <Select
+              labelId="notifications-select-label"
+              label="Notification Level"
+              value={notifications ? 'all' : 'none'}
+              onChange={(e) => setNotifications(e.target.value === 'all')}
+            >
+              {GENERAL_SETTINGS.notifications.map(option => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </Select>
+            <FormHelperText>Configure notification preferences</FormHelperText>
+          </FormControl>
+
+          <Typography variant="h6" gutterBottom>
+            Startup
+          </Typography>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={autoStart}
+                onChange={(e) => setAutoStart(e.target.checked)}
+              />
+            }
+            label="Auto-start App"
+          />
+        </TabPanel>
+
+        <TabPanel value={currentTab} index={1}>
+          <Typography variant="h6" gutterBottom>
+            Speech Recognition
+          </Typography>
+
+          {showSetupGuide ? (
+            <Box sx={{ mb: 3 }}>
+              <Alert severity="info" sx={{ mb: 2 }}>
+                Welcome to Speech Recognition Setup! Follow these steps to enable voice input:
+                <ol style={{ marginBottom: 0 }}>
+                  <li>Ensure you have a working microphone</li>
+                  <li>Click "Load Whisper Model" to download and initialize the model</li>
+                  <li>Wait for the model to finish loading</li>
+                  <li>Test the speech recognition using the test button</li>
+                </ol>
+              </Alert>
+            </Box>
+          ) : null}
+
+          <Box sx={{ mb: 3 }}>
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <InputLabel id="model-select-label">Model</InputLabel>
+              <Select
+                labelId="model-select-label"
+                label="Model"
+                value={modelConfig.modelId || ''}
+                onChange={(e) => updateModelConfig({ modelId: e.target.value })}
+                disabled={whisperLoading}
+              >
+                {MODEL_OPTIONS.models.map(option => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </Select>
+              <FormHelperText>Select a Whisper model variant</FormHelperText>
+            </FormControl>
+
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <InputLabel id="encoder-model-label">Encoder Quantization</InputLabel>
+              <Select
+                labelId="encoder-model-label"
+                label="Encoder Quantization"
+                value={modelConfig.encoderModel || ''}
+                onChange={(e) => updateModelConfig({ encoderModel: e.target.value })}
+                disabled={whisperLoading}
+              >
+                {MODEL_OPTIONS.quantization.map(option => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </Select>
+              <FormHelperText>Lower quantization = faster but less accurate</FormHelperText>
+            </FormControl>
+
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <InputLabel id="decoder-model-label">Decoder Quantization</InputLabel>
+              <Select
+                labelId="decoder-model-label"
+                label="Decoder Quantization"
+                value={modelConfig.decoderModel || ''}
+                onChange={(e) => updateModelConfig({ decoderModel: e.target.value })}
+                disabled={whisperLoading}
+              >
+                {MODEL_OPTIONS.quantization.map(option => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </Select>
+              <FormHelperText>Lower quantization = faster but less accurate</FormHelperText>
+            </FormControl>
+          </Box>
+
+          <FormControl fullWidth variant="outlined" sx={{ mb: 3 }}>
+            <InputLabel id="language-select-label">Recognition Language</InputLabel>
+            <Select
+              labelId="language-select-label"
+              label="Recognition Language"
+              value={selectedLanguage}
+              onChange={(e) => {
+                setSelectedLanguage(e.target.value);
+                localStorage.setItem('whisperLanguage', e.target.value);
+              }}
+            >
+              {LANGUAGE_OPTIONS.map(option => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <Box sx={{ mb: 3 }}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={autoLoadModel}
+                  onChange={handleAutoLoadChange}
+                  disabled={!hasCompletedSetup}
+                />
+              }
+              label="Automatically load model on startup"
+            />
+          </Box>
+
+          <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
             <Button
               variant="contained"
               onClick={handleLoadWhisperModel}
-              disabled={whisperLoading}
-              sx={{ mr: 2 }}
+              disabled={whisperLoading || isModelLoaded}
+              startIcon={whisperLoading ? <CircularProgress size={20} /> : <SmartToyIcon />}
+              color="primary"
+              fullWidth
             >
               {whisperLoading ? (
-                <>
-                  <CircularProgress size={24} sx={{ mr: 1 }} />
-                  {loadingMessage} ({loadingProgress}%)
-                </>
+                <>Loading Model ({loadingProgress}%)</>
+              ) : isModelLoaded ? (
+                'Model Loaded'
               ) : (
                 'Load Whisper Model'
               )}
             </Button>
+
+            {hasCompletedSetup && (
+              <Button
+                variant="outlined"
+                color="error"
+                onClick={handleResetSetup}
+                disabled={whisperLoading}
+                startIcon={<StopIcon />}
+              >
+                Reset Setup
+              </Button>
+            )}
+          </Box>
+
+          <Box sx={{ 
+            display: 'flex', 
+            flexDirection: 'column',
+            gap: 2 
+          }}>
             <Button
               variant="outlined"
               onClick={handleTestWhisper}
-              disabled={whisperLoading || !whisperWorkerRef.current || (!isModelReady && !isRecording)}
+              disabled={whisperLoading || !isModelLoaded}
               color={isRecording ? "error" : "primary"}
               startIcon={whisperLoading ? <CircularProgress size={20} /> : isRecording ? <StopIcon /> : <MicIcon />}
+              fullWidth
+              sx={{
+                height: 48,
+                transition: 'all 0.2s',
+                '&:not(:disabled):hover': {
+                  transform: 'scale(1.02)'
+                }
+              }}
             >
-              {whisperLoading ? loadingMessage : isRecording ? 'Stop Recording' : `Test Speech Recognition (${languageOptions.find(opt => opt.value === selectedLanguage)?.label})`}
+              {whisperLoading ? 'Loading Model' : isRecording ? 'Stop Recording' : `Test Speech Recognition (${LANGUAGE_OPTIONS.find(opt => opt.value === selectedLanguage)?.label})`}
             </Button>
-            {whisperError && (
-              <Alert severity="error" sx={{ mt: 2 }}>
-                {whisperError}
-              </Alert>
+
+            {transcriptionResult && (
+              <Paper 
+                elevation={0} 
+                variant="outlined" 
+                sx={{ 
+                  p: 2,
+                  bgcolor: 'success.light',
+                  color: 'success.contrastText',
+                  borderColor: 'success.main'
+                }}
+              >
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                  Transcription Result:
+                </Typography>
+                <Typography>{transcriptionResult}</Typography>
+              </Paper>
             )}
           </Box>
+
+          {whisperError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {whisperError}
+            </Alert>
+          )}
+
+          {isModelLoaded && (
+            <Alert severity="success" sx={{ mb: 2 }}>
+              Speech recognition is ready to use! You can now use voice input in tasks.
+            </Alert>
+          )}
         </TabPanel>
+
         <TabPanel value={currentTab} index={2}>
           <Box sx={{ p: 2 }}>
             <Typography variant="h6" gutterBottom>
@@ -452,8 +712,18 @@ const Settings = ({ open, onClose }) => {
         </TabPanel>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button onClick={handleSave} variant="contained" color="primary">
+        <Button 
+          onClick={handleClose} 
+          disabled={whisperLoading}
+        >
+          Cancel
+        </Button>
+        <Button 
+          onClick={handleSave} 
+          variant="contained" 
+          color="primary"
+          disabled={whisperLoading}
+        >
           Save Changes
         </Button>
       </DialogActions>

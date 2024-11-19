@@ -16,6 +16,7 @@ import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
 import CircularProgress from '@mui/material/CircularProgress';
 import Alert from '@mui/material/Alert';
+import useWhisperStore from '../stores/whisperStore';
 
 const FormContainer = styled(Box)(({ theme }) => ({
   width: '100%',
@@ -88,6 +89,15 @@ const TaskForm = ({
   onClose, 
   onDelete 
 }) => {
+  const { 
+    worker,
+    isModelLoaded,
+    isLoading: whisperLoading,
+    transcribe,
+    hasCompletedSetup,
+    error: whisperError
+  } = useWhisperStore();
+
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -100,11 +110,22 @@ const TaskForm = ({
   const [recordingFor, setRecordingFor] = useState(null);
   const [recordingStream, setRecordingStream] = useState(null);
   const [audioChunks, setAudioChunks] = useState([]);
+  const [selectedLanguage, setSelectedLanguage] = useState('en');
+  const recorderRef = React.useRef(null);
+  const [showSetupPrompt, setShowSetupPrompt] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [transcriptionError, setTranscriptionError] = useState(null);
-  const [selectedLanguage, setSelectedLanguage] = useState('en');
-  const whisperWorkerRef = React.useRef(null);
-  const recorderRef = React.useRef(null);
+
+  const handleClose = () => {
+    setFormData({
+      title: '',
+      description: '',
+      priority: 'medium',
+      dueDate: null,
+    });
+    setErrors({});
+    onClose();
+  };
 
   // Load saved language preference
   useEffect(() => {
@@ -124,52 +145,6 @@ const TaskForm = ({
       });
     }
   }, [task]);
-
-  useEffect(() => {
-    whisperWorkerRef.current = new Worker(
-      new URL('../workers/whisperWorker.js', import.meta.url),
-      { type: 'module' }
-    );
-
-    const messageHandler = (e) => {
-      const { status, error, text } = e.data;
-      console.log('Whisper worker message:', { status, error, text }); // Debug log
-      
-      switch (status) {
-        case 'complete':
-          setIsProcessing(false);
-          if (recordingFor && text) {
-            console.log('Setting form data for:', recordingFor, 'with text:', text); // Debug log
-            setFormData(prev => {
-              const newData = {
-                ...prev,
-                [recordingFor]: text.trim()
-              };
-              console.log('New form data:', newData); // Debug log
-              return newData;
-            });
-            setRecordingFor(null); // Reset recording field after successful update
-          }
-          break;
-        case 'error':
-          console.error('Worker error:', error);
-          setTranscriptionError(error);
-          setIsProcessing(false);
-          break;
-      }
-    };
-
-    whisperWorkerRef.current.onmessage = messageHandler;
-
-    return () => {
-      if (whisperWorkerRef.current) {
-        whisperWorkerRef.current.terminate();
-      }
-      if (recordingStream) {
-        recordingStream.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, [recordingFor, recordingStream]);
 
   const handleChange = (field) => (event) => {
     setFormData(prev => ({
@@ -222,7 +197,11 @@ const TaskForm = ({
   };
 
   const startRecording = async (field) => {
-    setTranscriptionError(null);
+    if (!hasCompletedSetup || !isModelLoaded) {
+      setShowSetupPrompt(true);
+      return;
+    }
+
     setRecordingFor(field);
     let mediaStream = null;
     try {
@@ -260,7 +239,6 @@ const TaskForm = ({
       if (mediaStream) {
         mediaStream.getTracks().forEach(track => track.stop());
       }
-      setTranscriptionError('Error accessing microphone. Please make sure microphone permissions are granted.');
     }
   };
 
@@ -272,11 +250,12 @@ const TaskForm = ({
       setIsRecording(false);
       
       // Process the recording
-      setIsProcessing(true);
       const currentChunks = [...audioChunks];
       const audioBlob = new Blob(currentChunks, { type: 'audio/webm' });
       
       try {
+        setIsProcessing(true);
+        setTranscriptionError(null);
         const processingContext = new AudioContext({ sampleRate: 16000 });
         const arrayBuffer = await audioBlob.arrayBuffer();
         const audioBuffer = await processingContext.decodeAudioData(arrayBuffer);
@@ -284,185 +263,242 @@ const TaskForm = ({
         
         setAudioChunks([]);
         
-        console.log('Sending audio data to worker for field:', recordingFor, 'language:', selectedLanguage); // Debug log
-        whisperWorkerRef.current.postMessage({ 
-          type: 'transcribe',
-          audio: audioData,
-          language: selectedLanguage,
-        });
+        const text = await transcribe(audioData, selectedLanguage);
+        
+        if (recordingFor && text) {
+          setFormData(prev => ({
+            ...prev,
+            [recordingFor]: text.trim()
+          }));
+          setRecordingFor(null);
+        }
 
         await processingContext.close();
       } catch (err) {
         console.error('Error processing audio:', err);
-        setTranscriptionError('Error processing audio. Please try again with a shorter recording.');
+        setTranscriptionError('Failed to process audio. Please try again.');
+      } finally {
         setIsProcessing(false);
       }
     }
   };
 
   return (
-    <FormContainer>
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -20 }}
-      >
-        <StyledPaper elevation={3}>
-          <IconButton 
-            className="close-button"
-            onClick={onClose}
-            size="small"
-          >
-            <CloseIcon />
-          </IconButton>
-
-          <form onSubmit={handleSubmit}>
-            <FormContent>
-              <Typography variant="h5">
-                {task ? 'Edit Task' : 'New Task'}
-              </Typography>
-
-              <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
-                <TextField
-                  label="Title"
-                  value={formData.title}
-                  onChange={handleChange('title')}
-                  error={!!errors.title}
-                  helperText={errors.title}
-                  fullWidth
-                  required
-                  autoFocus
-                />
-                <IconButton
-                  onClick={() => startRecording('title')}
-                  disabled={isRecording || isProcessing}
-                  color={recordingFor === 'title' && isRecording ? 'error' : 'default'}
-                  sx={{ mt: 1 }}
-                >
-                  <MicIcon />
-                </IconButton>
-              </Box>
-
-              <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
-                <TextField
-                  label="Description"
-                  value={formData.description}
-                  onChange={handleChange('description')}
-                  error={!!errors.description}
-                  helperText={errors.description}
-                  multiline
-                  rows={4}
-                  fullWidth
-                />
-                <IconButton
-                  onClick={() => startRecording('description')}
-                  disabled={isRecording || isProcessing}
-                  color={recordingFor === 'description' && isRecording ? 'error' : 'default'}
-                  sx={{ mt: 1 }}
-                >
-                  <MicIcon />
-                </IconButton>
-              </Box>
-
-              <TextField
-                select
-                label="Priority"
-                value={formData.priority}
-                onChange={handleChange('priority')}
-                fullWidth
-              >
-                {priorities.map((option) => (
-                  <MenuItem 
-                    key={option.value} 
-                    value={option.value}
-                    sx={{ color: option.color }}
-                  >
-                    {option.label}
-                  </MenuItem>
-                ))}
-              </TextField>
-
-              <DateTimePicker
-                label="Due Date"
-                value={formData.dueDate}
-                onChange={handleDateChange}
-                slotProps={{ textField: { fullWidth: true } }}
-                minDate={new Date()}
-                format="Pp"
-              />
-
-              <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 2 }}>
-                {task && (
-                  <Button
-                    variant="outlined"
-                    color="error"
-                    onClick={() => onDelete(task.id)}
-                  >
-                    Delete
-                  </Button>
-                )}
-                <Button
-                  variant="contained"
-                  type="submit"
-                  color="primary"
-                >
-                  {task ? 'Save Changes' : 'Create Task'}
-                </Button>
-              </Box>
-            </FormContent>
-          </form>
-        </StyledPaper>
-      </motion.div>
-
-      <VoiceInputDialog
-        open={isRecording || isProcessing}
-        onClose={() => {
-          if (!isProcessing) {
-            stopRecording();
-          }
-        }}
+    <>
+      <Dialog
+        open={showSetupPrompt}
+        onClose={() => setShowSetupPrompt(false)}
+        maxWidth="sm"
+        fullWidth
       >
         <DialogContent>
-          <Box sx={{ 
-            display: 'flex', 
-            flexDirection: 'column', 
-            alignItems: 'center', 
-            gap: 2,
-            py: 2
-          }}>
-            {isRecording ? (
-              <>
-                <RecordingIndicator />
-                <Typography>
-                  Recording {recordingFor === 'title' ? 'title' : 'description'}...
-                </Typography>
-                <Button
-                  variant="contained"
-                  color="error"
-                  startIcon={<StopIcon />}
-                  onClick={stopRecording}
-                >
-                  Stop Recording
-                </Button>
-              </>
-            ) : isProcessing && (
-              <>
-                <CircularProgress />
-                <Typography>
-                  Processing audio...
-                </Typography>
-              </>
-            )}
-            
-            {transcriptionError && (
-              <Alert severity="error" sx={{ mt: 2 }}>
-                {transcriptionError}
-              </Alert>
-            )}
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Speech recognition needs to be set up before you can use voice input. 
+            Would you like to set it up now?
+          </Alert>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+            <Button onClick={() => setShowSetupPrompt(false)}>
+              Not Now
+            </Button>
+            <Button 
+              variant="contained" 
+              onClick={() => {
+                setShowSetupPrompt(false);
+                onClose();
+                // You'll need to implement this function in App.js to open settings
+                window.electron.app.openSettings();
+              }}
+            >
+              Setup Now
+            </Button>
           </Box>
         </DialogContent>
-      </VoiceInputDialog>
-    </FormContainer>
+      </Dialog>
+
+      <FormContainer>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+        >
+          <StyledPaper elevation={3}>
+            <IconButton 
+              className="close-button"
+              onClick={handleClose}
+              size="small"
+            >
+              <CloseIcon />
+            </IconButton>
+
+            <form onSubmit={handleSubmit}>
+              <FormContent>
+                <Typography variant="h5">
+                  {task ? 'Edit Task' : 'New Task'}
+                </Typography>
+
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                  <TextField
+                    fullWidth
+                    label="Title"
+                    name="title"
+                    value={formData.title}
+                    onChange={handleChange('title')}
+                    error={!!errors.title}
+                    helperText={errors.title}
+                    InputProps={{
+                      endAdornment: (
+                        <IconButton
+                          onClick={() => startRecording('title')}
+                          disabled={!isModelLoaded || isRecording || isProcessing}
+                          sx={{
+                            color: isModelLoaded ? 'primary.main' : 'action.disabled',
+                            '&.Mui-disabled': {
+                              color: 'action.disabled',
+                              pointerEvents: 'none'
+                            }
+                          }}
+                        >
+                          <MicIcon />
+                        </IconButton>
+                      ),
+                    }}
+                  />
+                </Box>
+
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                  <TextField
+                    fullWidth
+                    multiline
+                    rows={4}
+                    label="Description"
+                    name="description"
+                    value={formData.description}
+                    onChange={handleChange('description')}
+                    error={!!errors.description}
+                    helperText={errors.description}
+                    InputProps={{
+                      endAdornment: (
+                        <IconButton
+                          onClick={() => startRecording('description')}
+                          disabled={!isModelLoaded || isRecording || isProcessing}
+                          sx={{
+                            color: isModelLoaded ? 'primary.main' : 'action.disabled',
+                            '&.Mui-disabled': {
+                              color: 'action.disabled',
+                              pointerEvents: 'none'
+                            }
+                          }}
+                        >
+                          <MicIcon />
+                        </IconButton>
+                      ),
+                    }}
+                  />
+                </Box>
+
+                <TextField
+                  select
+                  label="Priority"
+                  value={formData.priority}
+                  onChange={handleChange('priority')}
+                  fullWidth
+                >
+                  {priorities.map((option) => (
+                    <MenuItem 
+                      key={option.value} 
+                      value={option.value}
+                      sx={{ color: option.color }}
+                    >
+                      {option.label}
+                    </MenuItem>
+                  ))}
+                </TextField>
+
+                <DateTimePicker
+                  label="Due Date"
+                  value={formData.dueDate}
+                  onChange={handleDateChange}
+                  slotProps={{ textField: { fullWidth: true } }}
+                  minDate={new Date()}
+                  format="Pp"
+                />
+
+                <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 2 }}>
+                  {task && (
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      onClick={() => onDelete(task.id)}
+                    >
+                      Delete
+                    </Button>
+                  )}
+                  <Button
+                    variant="contained"
+                    type="submit"
+                    color="primary"
+                  >
+                    {task ? 'Save Changes' : 'Create Task'}
+                  </Button>
+                </Box>
+              </FormContent>
+            </form>
+          </StyledPaper>
+        </motion.div>
+
+        <VoiceInputDialog
+          open={isRecording || isProcessing}
+          onClose={() => {
+            if (!isProcessing && !isRecording) {
+              stopRecording();
+            }
+          }}
+          keepMounted={false}
+          disablePortal={false}
+        >
+          <DialogContent>
+            <Box sx={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center', 
+              gap: 2,
+              py: 2
+            }}>
+              {isRecording ? (
+                <>
+                  <RecordingIndicator />
+                  <Typography>
+                    Recording {recordingFor === 'title' ? 'title' : 'description'}...
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    color="error"
+                    startIcon={<StopIcon />}
+                    onClick={stopRecording}
+                    tabIndex={0}
+                  >
+                    Stop Recording
+                  </Button>
+                </>
+              ) : isProcessing && (
+                <>
+                  <CircularProgress />
+                  <Typography>
+                    Processing audio...
+                  </Typography>
+                </>
+              )}
+              
+              {transcriptionError && (
+                <Alert severity="error" sx={{ mt: 2 }}>
+                  {transcriptionError}
+                </Alert>
+              )}
+            </Box>
+          </DialogContent>
+        </VoiceInputDialog>
+      </FormContainer>
+    </>
   );
 };
 
