@@ -31,14 +31,44 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       webSecurity: true,
-      preload: path.join(__dirname, 'preload.js'),
-      backgroundThrottling: true,
+      webgl: true,
       enableWebSQL: false,
       spellcheck: false,
-      v8CacheOptions: 'bypassHeatCheck'
+      v8CacheOptions: 'bypassHeatCheck',
+      preload: path.join(__dirname, 'preload.js'),
+      backgroundThrottling: true,
     },
     backgroundColor: '#ffffff',
   });
+
+  // Set Content Security Policy
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; " +
+          "script-src * 'unsafe-inline' 'unsafe-eval' blob:; " +
+          "connect-src * 'unsafe-inline' data: blob:; " +
+          "img-src * data: blob: 'unsafe-inline'; " +
+          "frame-src *; " +
+          "style-src * 'unsafe-inline';"
+        ]
+      }
+    });
+  });
+
+  // Enable WebGPU and GPU features
+  app.commandLine.appendSwitch('enable-unsafe-webgpu');
+  app.commandLine.appendSwitch('enable-features', 'Vulkan,WebGPU,WebGPUDeveloperFeatures');
+  app.commandLine.appendSwitch('use-vulkan');
+  app.commandLine.appendSwitch('enable-gpu-rasterization');
+  app.commandLine.appendSwitch('ignore-gpu-blocklist');
+  app.commandLine.appendSwitch('disable-gpu-process-crash-limit');
+  app.commandLine.appendSwitch('in-process-gpu');
+  app.commandLine.appendSwitch('enable-zero-copy');
+  app.commandLine.appendSwitch('enable-webgpu-developer-features');
+  app.commandLine.appendSwitch('enable-dawn-features', 'allow_unsafe_apis');
 
   // Remove the menu bar completely
   const Menu = require('electron').Menu;

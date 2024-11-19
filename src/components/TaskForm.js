@@ -11,19 +11,31 @@ import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { motion, AnimatePresence } from 'framer-motion';
 import Typography from '@mui/material/Typography';
 
+const FormContainer = styled(Box)(({ theme }) => ({
+  width: '100%',
+  maxWidth: 600,
+  margin: 'auto',
+}));
+
 const StyledPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(3),
   width: '100%',
-  maxWidth: 600,
-  position: 'relative',
-  overflow: 'hidden',
+  backgroundColor: theme.palette.background.paper,
   borderRadius: theme.shape.borderRadius * 2,
   boxShadow: theme.shadows[10],
+  position: 'relative',
   '& .close-button': {
     position: 'absolute',
     right: theme.spacing(1),
     top: theme.spacing(1),
+    zIndex: 1,
   },
+}));
+
+const FormContent = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: theme.spacing(3),
 }));
 
 const priorities = [
@@ -63,7 +75,6 @@ const TaskForm = ({
       ...prev,
       [field]: event.target.value
     }));
-    // Clear error when user starts typing
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: null }));
     }
@@ -110,97 +121,99 @@ const TaskForm = ({
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-    >
-      <StyledPaper elevation={3}>
-        <IconButton 
-          className="close-button"
-          onClick={onClose}
-          size="small"
-        >
-          <CloseIcon />
-        </IconButton>
+    <FormContainer>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -20 }}
+      >
+        <StyledPaper elevation={3}>
+          <IconButton 
+            className="close-button"
+            onClick={onClose}
+            size="small"
+          >
+            <CloseIcon />
+          </IconButton>
 
-        <form onSubmit={handleSubmit}>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <Typography variant="h5">
-              {task ? 'Edit Task' : 'New Task'}
-            </Typography>
+          <form onSubmit={handleSubmit}>
+            <FormContent>
+              <Typography variant="h5">
+                {task ? 'Edit Task' : 'New Task'}
+              </Typography>
 
-            <TextField
-              label="Title"
-              value={formData.title}
-              onChange={handleChange('title')}
-              error={!!errors.title}
-              helperText={errors.title}
-              fullWidth
-              required
-              autoFocus
-            />
+              <TextField
+                label="Title"
+                value={formData.title}
+                onChange={handleChange('title')}
+                error={!!errors.title}
+                helperText={errors.title}
+                fullWidth
+                required
+                autoFocus
+              />
 
-            <TextField
-              label="Description"
-              value={formData.description}
-              onChange={handleChange('description')}
-              error={!!errors.description}
-              helperText={errors.description}
-              multiline
-              rows={4}
-              fullWidth
-            />
+              <TextField
+                label="Description"
+                value={formData.description}
+                onChange={handleChange('description')}
+                error={!!errors.description}
+                helperText={errors.description}
+                multiline
+                rows={4}
+                fullWidth
+              />
 
-            <TextField
-              select
-              label="Priority"
-              value={formData.priority}
-              onChange={handleChange('priority')}
-              fullWidth
-            >
-              {priorities.map((option) => (
-                <MenuItem 
-                  key={option.value} 
-                  value={option.value}
-                  sx={{ color: option.color }}
-                >
-                  {option.label}
-                </MenuItem>
-              ))}
-            </TextField>
-
-            <DateTimePicker
-              label="Due Date"
-              value={formData.dueDate}
-              onChange={handleDateChange}
-              slotProps={{ textField: { fullWidth: true } }}
-              minDate={new Date()}
-              format="Pp"
-            />
-
-            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 2 }}>
-              {task && (
-                <Button
-                  variant="outlined"
-                  color="error"
-                  onClick={() => onDelete(task.id)}
-                >
-                  Delete
-                </Button>
-              )}
-              <Button
-                variant="contained"
-                type="submit"
-                color="primary"
+              <TextField
+                select
+                label="Priority"
+                value={formData.priority}
+                onChange={handleChange('priority')}
+                fullWidth
               >
-                {task ? 'Save Changes' : 'Create Task'}
-              </Button>
-            </Box>
-          </Box>
-        </form>
-      </StyledPaper>
-    </motion.div>
+                {priorities.map((option) => (
+                  <MenuItem 
+                    key={option.value} 
+                    value={option.value}
+                    sx={{ color: option.color }}
+                  >
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </TextField>
+
+              <DateTimePicker
+                label="Due Date"
+                value={formData.dueDate}
+                onChange={handleDateChange}
+                slotProps={{ textField: { fullWidth: true } }}
+                minDate={new Date()}
+                format="Pp"
+              />
+
+              <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 2 }}>
+                {task && (
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    onClick={() => onDelete(task.id)}
+                  >
+                    Delete
+                  </Button>
+                )}
+                <Button
+                  variant="contained"
+                  type="submit"
+                  color="primary"
+                >
+                  {task ? 'Save Changes' : 'Create Task'}
+                </Button>
+              </Box>
+            </FormContent>
+          </form>
+        </StyledPaper>
+      </motion.div>
+    </FormContainer>
   );
 };
 

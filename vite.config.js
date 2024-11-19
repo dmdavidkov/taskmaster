@@ -39,6 +39,10 @@ export default defineConfig({
     },
     watch: {
       usePolling: true,
+    },
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp'
     }
   },
   optimizeDeps: {
@@ -50,6 +54,7 @@ export default defineConfig({
       'framer-motion',
       'react',
       'react-dom',
+      '@huggingface/transformers',
       '@mui/x-date-pickers',
       'date-fns'
     ],
@@ -58,6 +63,9 @@ export default defineConfig({
         '.js': 'jsx'
       }
     }
+  },
+  worker: {
+    format: 'es'
   },
   define: {
     'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV),

@@ -224,10 +224,29 @@ function App() {
                 layout
                 sx={{
                   flex: 1,
-                  overflow: 'hidden',
+                  overflowY: 'auto',
                   display: 'flex',
                   flexDirection: 'column',
                   p: 2,
+                  // Modern scrollbar styling
+                  '&::-webkit-scrollbar': {
+                    width: '8px',
+                    background: 'transparent',
+                  },
+                  '&::-webkit-scrollbar-thumb': {
+                    background: theme => theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+                    borderRadius: '4px',
+                    '&:hover': {
+                      background: theme => theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)',
+                    },
+                  },
+                  '&::-webkit-scrollbar-track': {
+                    background: 'transparent',
+                  },
+                  // Firefox scrollbar styling
+                  scrollbarWidth: 'thin',
+                  scrollbarColor: theme => 
+                    `${theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'} transparent`,
                 }}
               >
                 <Box 
@@ -284,9 +303,10 @@ function App() {
                       bgcolor: 'rgba(0, 0, 0, 0.5)',
                       zIndex: 1200,
                       display: 'flex',
-                      alignItems: 'center',
+                      alignItems: 'flex-start',
                       justifyContent: 'center',
-                      p: 3,
+                      overflowY: 'auto',
+                      py: 3,
                     }}
                   >
                     <TaskForm

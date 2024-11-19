@@ -16,10 +16,12 @@ import TodayIcon from '@mui/icons-material/Today';
 import UpcomingIcon from '@mui/icons-material/Upcoming';
 import FlagIcon from '@mui/icons-material/Flag';
 import DoneAllIcon from '@mui/icons-material/DoneAll';
+import SettingsIcon from '@mui/icons-material/Settings';
 import Divider from '@mui/material/Divider';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import { motion } from 'framer-motion';
+import Settings from './Settings';
 
 const drawerWidth = 280;
 
@@ -83,6 +85,7 @@ const Sidebar = ({
   onAddTask,
 }) => {
   const [version, setVersion] = useState('');
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     // Get app version on component mount
@@ -90,6 +93,14 @@ const Sidebar = ({
       window.electron.app.getVersion().then(setVersion).catch(console.error);
     }
   }, []);
+
+  const handleSettingsClick = () => {
+    setSettingsOpen(true);
+  };
+
+  const handleSettingsClose = () => {
+    setSettingsOpen(false);
+  };
 
   return (
     <StyledDrawer
@@ -167,14 +178,28 @@ const Sidebar = ({
 
         <Box sx={{ flexGrow: 1 }} />
 
+        <Divider sx={{ my: 2 }} />
+        
+        <StyledListItem
+          button
+          onClick={handleSettingsClick}
+          sx={{ mb: 1 }}
+        >
+          <ListItemIcon sx={{ minWidth: 40 }}>
+            <SettingsIcon />
+          </ListItemIcon>
+          <ListItemText primary="Settings" />
+        </StyledListItem>
+
         <Typography 
           variant="caption" 
           color="text.secondary"
           align="center"
-          sx={{ mt: 2 }}
         >
           TaskMaster v{version}
         </Typography>
+
+        <Settings open={settingsOpen} onClose={handleSettingsClose} />
       </Box>
     </StyledDrawer>
   );
