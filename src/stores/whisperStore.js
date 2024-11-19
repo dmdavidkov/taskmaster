@@ -8,7 +8,8 @@ const useWhisperStore = create(
       isModelLoaded: false,
       isLoading: false,
       error: null,
-      loadingProgress: 0,
+      loadingProgress: {},  
+      loadingStage: null,
       hasCompletedSetup: false, // Track if user has completed initial setup
       modelConfig: {
         encoderModel: localStorage.getItem('whisperEncoderModel') || 'q4',
@@ -24,26 +25,48 @@ const useWhisperStore = create(
           );
           
           worker.onmessage = (e) => {
-            const { status, error, progress, text } = e.data;
+            const { status, error, progress, stage, file, total, loaded } = e.data;
             
             switch (status) {
               case 'progress':
-                set({ loadingProgress: progress || 0 });
+                if (file) {
+                  // Update progress for specific file
+                  set(state => ({
+                    loadingProgress: {
+                      ...state.loadingProgress,
+                      [file]: {
+                        progress: progress || 0,
+                        total,
+                        loaded
+                      }
+                    },
+                    loadingStage: stage || 'initializing'
+                  }));
+                } else {
+                  // Handle non-file specific progress
+                  set({ 
+                    loadingProgress: { '_overall': { progress: progress || 0 } },
+                    loadingStage: stage || 'initializing'
+                  });
+                }
                 break;
               case 'ready':
                 set({ 
                   isModelLoaded: true, 
                   isLoading: false, 
-                  loadingProgress: 100,
+                  loadingProgress: {},
+                  loadingStage: null,
                   error: null,
-                  hasCompletedSetup: true // Mark setup as complete when model is ready
+                  hasCompletedSetup: true
                 });
                 break;
               case 'error':
                 set({ 
                   error, 
                   isLoading: false,
-                  isModelLoaded: false 
+                  isModelLoaded: false,
+                  loadingStage: null,
+                  loadingProgress: {}
                 });
                 break;
             }
@@ -76,7 +99,7 @@ const useWhisperStore = create(
           return;
         }
 
-        set({ isLoading: true, error: null, loadingProgress: 0 });
+        set({ isLoading: true, error: null, loadingProgress: {} });
         
         // Convert config to worker format
         const workerConfig = {
@@ -158,7 +181,7 @@ const useWhisperStore = create(
             isModelLoaded: false,
             isLoading: false,
             error: null,
-            loadingProgress: 0 
+            loadingProgress: {} 
           });
         }
       },
@@ -173,7 +196,8 @@ const useWhisperStore = create(
           isModelLoaded: false,
           isLoading: false,
           error: null,
-          loadingProgress: 0,
+          loadingProgress: {},
+          loadingStage: null,
           hasCompletedSetup: false
         });
       }

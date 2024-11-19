@@ -215,6 +215,7 @@ const Settings = ({ open, onClose }) => {
     isLoading: whisperLoading,
     error: whisperError,
     loadingProgress,
+    loadingStage,
     hasCompletedSetup,
     resetSetup,
     modelConfig,
@@ -234,28 +235,24 @@ const Settings = ({ open, onClose }) => {
   const [darkMode, setDarkMode] = React.useState(false);
   const [notifications, setNotifications] = React.useState(true);
   const [autoStart, setAutoStart] = React.useState(false);
-  const [selectedLanguage, setSelectedLanguage] = React.useState('en');
+  const [selectedLanguage, setSelectedLanguage] = useState(localStorage.getItem('whisperLanguage') || 'en');
+  const dialogRef = React.useRef(null);
+  const previousFocusRef = React.useRef(null);
 
-  const handleClose = () => {
-    // Don't allow closing during model loading
-    if (whisperLoading) {
-      return;
-    }
-    
-    // If we're closing and the model is still loading, clean up
-    if (!isModelLoaded && !whisperLoading) {
-      cleanup();
-    }
-    
-    onClose();
-  };
-
-  // Initialize worker when Settings is first opened and setup is not complete
   useEffect(() => {
-    if (open && !hasCompletedSetup) {
-      initializeWorker();
+    if (open) {
+      // Store the currently focused element when dialog opens
+      previousFocusRef.current = document.activeElement;
     }
-  }, [open, hasCompletedSetup, initializeWorker]);
+  }, [open]);
+
+  const handleClose = (event, reason) => {
+    // Return focus to the previous element before closing
+    if (previousFocusRef.current) {
+      previousFocusRef.current.focus();
+    }
+    onClose(event, reason);
+  };
 
   const handleLoadWhisperModel = () => {
     loadModel();
@@ -367,22 +364,125 @@ const Settings = ({ open, onClose }) => {
 
   const handleSave = () => {
     localStorage.setItem('whisperLanguage', selectedLanguage);
-    onClose();
+    handleClose();
+  };
+
+  const formatBytes = (bytes) => {
+    if (!bytes) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+  };
+
+  const getLoadingMessage = (progress, stage) => {
+    if (stage === 'downloading') {
+      // If we're loading from cache, show that immediately
+      if (progress._cached) {
+        return 'Loading model from cache...';
+      }
+
+      // Only show files that are actually downloading
+      const files = Object.entries(progress)
+        .filter(([_, data]) => 
+          data.total > 0 && 
+          data.loaded > 0 && 
+          !data.cached && // Skip cached files
+          data.loaded !== data.total // Skip fully loaded files
+        )
+        .sort((a, b) => b[1].total - a[1].total);
+      
+      if (files.length === 0) {
+        return 'Preparing model...';
+      }
+      
+      return files.map(([filename, data]) => {
+        const percentage = (data.progress || 0).toFixed(1);
+        const loaded = formatBytes(data.loaded);
+        const total = formatBytes(data.total);
+        return `${filename}: ${percentage}% (${loaded}/${total})`;
+      }).join('\n');
+    } else if (stage === 'loading') {
+      return progress._cached ? 
+        'Initializing cached model...' : 
+        'Loading model into memory...';
+    } else if (stage === 'preparing') {
+      return 'Preparing model for inference...';
+    }
+    return 'Initializing...';
+  };
+
+  const renderModelStatus = () => {
+    if (whisperError) {
+      return (
+        <Alert severity="error" sx={{ width: '100%' }}>
+          {whisperError}
+        </Alert>
+      );
+    }
+    
+    if (whisperLoading) {
+      const messages = getLoadingMessage(loadingProgress, loadingStage).split('\n');
+      
+      return (
+        <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+          <Box sx={{ 
+            width: '100%', 
+            maxWidth: '500px',
+            display: 'flex', 
+            flexDirection: 'column', 
+            gap: 1
+          }}>
+            {messages.map((message, index) => (
+              <Box key={index} sx={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 2, 
+                padding: '4px 8px',
+                backgroundColor: 'rgba(0,0,0,0.02)',
+                borderRadius: '4px'
+              }}>
+                <CircularProgress size={16} />
+                <Typography variant="body2" color="text.secondary" sx={{ 
+                  fontFamily: 'monospace',
+                  whiteSpace: 'pre',
+                  flexGrow: 1
+                }}>
+                  {message}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+          {loadingStage === 'downloading' && (
+            <Typography variant="caption" color="text.secondary">
+              This may take a few minutes depending on your internet speed
+            </Typography>
+          )}
+        </Box>
+      );
+    }
+
+    if (isModelLoaded) {
+      return (
+        <Alert severity="success" sx={{ width: '100%' }}>
+          Model loaded successfully
+        </Alert>
+      );
+    }
+
+    return null;
   };
 
   return (
     <StyledDialog
+      ref={dialogRef}
       open={open}
       onClose={handleClose}
       aria-labelledby="settings-dialog-title"
-      maxWidth="md"
-      fullWidth
+      disableEscapeKeyDown={whisperLoading}
+      disableRestoreFocus
     >
-      <DialogTitle sx={{ 
-        display: 'flex', 
-        alignItems: 'center',
-        gap: 1
-      }}>
+      <DialogTitle id="settings-dialog-title">
         <SettingsIcon /> Settings
       </DialogTitle>
       <DialogContent>
@@ -580,89 +680,74 @@ const Settings = ({ open, onClose }) => {
             />
           </Box>
 
-          <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
-            <Button
-              variant="contained"
-              onClick={handleLoadWhisperModel}
-              disabled={whisperLoading || isModelLoaded}
-              startIcon={whisperLoading ? <CircularProgress size={20} /> : <SmartToyIcon />}
-              color="primary"
-              fullWidth
-            >
-              {whisperLoading ? (
-                <>Loading Model ({loadingProgress}%)</>
-              ) : isModelLoaded ? (
-                'Model Loaded'
-              ) : (
-                'Load Whisper Model'
-              )}
-            </Button>
-
-            {hasCompletedSetup && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mb: 3 }}>
+            <Box sx={{ display: 'flex', gap: 2 }}>
               <Button
-                variant="outlined"
-                color="error"
-                onClick={handleResetSetup}
-                disabled={whisperLoading}
-                startIcon={<StopIcon />}
+                variant="contained"
+                onClick={handleLoadWhisperModel}
+                disabled={whisperLoading || isModelLoaded}
+                startIcon={whisperLoading ? <CircularProgress size={20} /> : <SmartToyIcon />}
+                color="primary"
+                sx={{ flexGrow: 1 }}
               >
-                Reset Setup
+                {whisperLoading ? 'Loading...' : isModelLoaded ? 'Model Loaded' : 'Load Whisper Model'}
               </Button>
-            )}
+
+              {hasCompletedSetup && (
+                <Button
+                  variant="outlined"
+                  color="error"
+                  onClick={handleResetSetup}
+                  startIcon={<StopIcon />}
+                >
+                  Reset
+                </Button>
+              )}
+            </Box>
+            {renderModelStatus()}
           </Box>
 
           <Box sx={{ 
             display: 'flex', 
             flexDirection: 'column',
-            gap: 2 
+            gap: 2,
+            p: 2,
+            bgcolor: 'background.paper',
+            borderRadius: 1,
+            border: 1,
+            borderColor: 'divider'
           }}>
+            <Typography variant="subtitle1" component="h3">
+              Test Speech Recognition
+            </Typography>
+            
             <Button
-              variant="outlined"
+              variant="contained"
+              color={isRecording ? "error" : "secondary"}
+              startIcon={isRecording ? <StopIcon /> : <MicIcon />}
               onClick={handleTestWhisper}
-              disabled={whisperLoading || !isModelLoaded}
-              color={isRecording ? "error" : "primary"}
-              startIcon={whisperLoading ? <CircularProgress size={20} /> : isRecording ? <StopIcon /> : <MicIcon />}
-              fullWidth
-              sx={{
-                height: 48,
-                transition: 'all 0.2s',
-                '&:not(:disabled):hover': {
-                  transform: 'scale(1.02)'
-                }
-              }}
+              disabled={!isModelLoaded || whisperLoading}
             >
-              {whisperLoading ? 'Loading Model' : isRecording ? 'Stop Recording' : `Test Speech Recognition (${LANGUAGE_OPTIONS.find(opt => opt.value === selectedLanguage)?.label})`}
+              {isRecording ? "Stop Recording" : "Test Speech Recognition"}
             </Button>
-
-            {transcriptionResult && (
-              <Paper 
-                elevation={0} 
-                variant="outlined" 
-                sx={{ 
-                  p: 2,
-                  bgcolor: 'success.light',
-                  color: 'success.contrastText',
-                  borderColor: 'success.main'
-                }}
-              >
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                  Transcription Result:
-                </Typography>
-                <Typography>{transcriptionResult}</Typography>
-              </Paper>
-            )}
           </Box>
 
-          {whisperError && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {whisperError}
-            </Alert>
-          )}
-
-          {isModelLoaded && (
-            <Alert severity="success" sx={{ mb: 2 }}>
-              Speech recognition is ready to use! You can now use voice input in tasks.
-            </Alert>
+          {transcriptionResult && (
+            <Paper 
+              elevation={0} 
+              variant="outlined" 
+              sx={{ 
+                p: 2,
+                bgcolor: 'success.light',
+                color: 'success.contrastText',
+                borderColor: 'success.main'
+              }}
+            >
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Transcription Result:
+              </Typography>
+              <Typography>{transcriptionResult}</Typography>
+            </Paper>
           )}
         </TabPanel>
 
@@ -715,16 +800,16 @@ const Settings = ({ open, onClose }) => {
         <Button 
           onClick={handleClose} 
           disabled={whisperLoading}
+          color="inherit"
         >
           Cancel
         </Button>
         <Button 
-          onClick={handleSave} 
-          variant="contained" 
-          color="primary"
+          onClick={handleSave}
           disabled={whisperLoading}
+          variant="contained"
         >
-          Save Changes
+          Save
         </Button>
       </DialogActions>
     </StyledDialog>

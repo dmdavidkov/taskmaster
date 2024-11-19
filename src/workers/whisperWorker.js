@@ -106,50 +106,115 @@ async function transcribe(audio, language, config) {
 
 async function load(config) {
     try {
-        let loadProgress = 0;
-        const updateProgress = () => {
-            loadProgress += 25;
-            self.postMessage({
-                status: 'progress',
-                progress: Math.min(loadProgress, 100)
-            });
+        let currentStage = 'downloading';
+        let lastProgressTime = {};
+        let hasProgress = false;
+        let isFirstProgress = true;
+        
+        const progress_callback = (progress) => {
+            if (typeof progress === 'object') {
+                const { file, loaded, total } = progress;
+                
+                // Only report if we have actual data and it's a real download
+                if (total > 0) {
+                    // Check if this is the first progress event
+                    if (isFirstProgress) {
+                        isFirstProgress = false;
+                        // If loaded is already equal to total on first progress,
+                        // it's likely reading from cache
+                        if (loaded === total) {
+                            return;
+                        }
+                    }
+                    
+                    hasProgress = true;
+                    const now = Date.now();
+                    if (now - (lastProgressTime[file] || 0) < 100) {
+                        return;
+                    }
+                    lastProgressTime[file] = now;
+
+                    const percentage = (loaded / total) * 100;
+                    self.postMessage({ 
+                        status: 'progress', 
+                        progress: percentage,
+                        stage: 'downloading',
+                        file: file.split('/').pop(),
+                        total,
+                        loaded,
+                        cached: false
+                    });
+                }
+            } else {
+                self.postMessage({ 
+                    status: 'progress', 
+                    progress: Math.round(progress),
+                    stage: currentStage,
+                    cached: !hasProgress
+                });
+            }
         };
 
-        const [tokenizer, processor, model] = await AutomaticSpeechRecognitionPipeline.getInstance(updateProgress, config);
+        // Reset pipeline
+        pipeline = null;
         
-        // Warm up the model with dummy input
-        self.postMessage({
-            status: 'progress',
-            progress: 75,
-            message: 'Warming up model...'
-        });
-
-        // Create dummy input with correct dimensions as Float32Array
-        const dummyLength = 3000 * 128;
-        const dummyInput = new Float32Array(dummyLength).fill(0);
-        const dummyInputs = await processor(dummyInput, {
-            sampling_rate: SAMPLING_RATE,
-            return_tensors: true
-        });
-
-        await model.generate({
-            ...dummyInputs,
-            max_new_tokens: 1,
-            language: 'en',
-            task: 'transcribe',
-        });
-
+        // Start initialization
+        console.log('Starting model initialization');
         self.postMessage({ 
-            status: 'ready',
-            message: 'Model ready'
+            status: 'progress', 
+            progress: 0, 
+            stage: 'downloading',
+            cached: true
         });
-    } catch (error) {
-        console.error('Loading error:', error);
-        console.error('Inputs given to model:', error.inputs);
-        self.postMessage({
-            status: 'error',
-            error: error.message
+
+        try {
+            const [tokenizer, processor, model] = await AutomaticSpeechRecognitionPipeline.getInstance(progress_callback, config);
+
+            // If we got any real progress events, it wasn't cached
+            if (hasProgress) {
+                console.log('Model downloaded');
+            } else {
+                console.log('Model loaded from cache');
+            }
+            
+            currentStage = 'loading';
+            console.log('Moving to loading stage...');
+            self.postMessage({ 
+                status: 'progress', 
+                progress: 0, 
+                stage: 'loading',
+                cached: !hasProgress
+            });
+            
+            console.log('Initializing pipeline...');
+            pipeline = { tokenizer, processor, model };
+            
+            currentStage = 'preparing';
+            console.log('Preparing model for inference...');
+            self.postMessage({ 
+                status: 'progress', 
+                progress: 0, 
+                stage: 'preparing'
+            });
+            
+            console.log('Model loading complete');
+            
+            self.postMessage({ status: 'ready' });
+        } catch (e) {
+            console.error('Error loading model:', e);
+            self.postMessage({ 
+                status: 'error', 
+                error: `Failed to load model: ${e.message}` 
+            });
+            throw e;
+        }
+    } catch (e) {
+        console.error('Error in load():', e);
+        self.postMessage({ 
+            status: 'error', 
+            error: `Failed to initialize: ${e.message}` 
         });
+        throw e;
     }
 }
 
