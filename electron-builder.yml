@@ -8,6 +8,8 @@ files:
   - "package.json"
   - "!**/*.map"
   - "!**/*.d.ts"
+  - "!.env"
+  - "!.env.*"
   - "!node_modules/**/*.{md,markdown,MD}"
   - "!node_modules/**/{test,__tests__,tests,powered-test,example,examples}"
   - "!node_modules/.bin"

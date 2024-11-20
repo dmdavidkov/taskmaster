@@ -13,6 +13,9 @@ import { formatInTimeZone, utcToZonedTime } from 'date-fns-tz';
 import CircularProgress from '@mui/material/CircularProgress';
 import { styled } from '@mui/material/styles';
 import Chip from '@mui/material/Chip';
+import RecordVoiceOverIcon from '@mui/icons-material/RecordVoiceOver';
+import TranslateIcon from '@mui/icons-material/Translate';
+import Tooltip from '@mui/material/Tooltip';
 
 const StyledPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(2),
@@ -245,27 +248,70 @@ const TaskList = ({
                   </Typography>
                 )}
 
-                <Box sx={{ mt: 1, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                <Box sx={{ mt: 1, display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
                   {task.priority && (
                     <Chip
                       label={typeof task.priority === 'object' ? task.priority.level : task.priority}
                       size="small"
                       color={getPriorityColor(task.priority)}
+                      sx={{ textTransform: 'capitalize' }}
                     />
                   )}
                   {task.dueDate && (
                     <Chip
                       label={formatDate(task.dueDate)}
                       size="small"
-                      variant="outlined"
+                      color={isTaskToday(task.dueDate) ? 'warning' : 'default'}
                     />
                   )}
-                  {task.completed && task.completedAt && (
-                    <Chip
-                      label={`Completed ${formatDate(task.completedAt)}`}
-                      size="small"
-                      color="primary"
-                    />
+                  {task.metadata?.speechText && (
+                    <Tooltip
+                      title={
+                        <Box>
+                          <Box sx={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: 1, 
+                            mb: 1 
+                          }}>
+                            <TranslateIcon fontSize="small" />
+                            <Typography variant="caption" sx={{ 
+                              backgroundColor: 'primary.main',
+                              color: 'primary.contrastText',
+                              px: 1,
+                              py: 0.5,
+                              borderRadius: 1,
+                              fontWeight: 'bold'
+                            }}>
+                              {task.metadata.language.toUpperCase()}
+                            </Typography>
+                          </Box>
+                          <Typography variant="body2" sx={{ 
+                            whiteSpace: 'pre-wrap',
+                            fontStyle: 'italic',
+                            color: 'text.secondary'
+                          }}>
+                            "{task.metadata.speechText}"
+                          </Typography>
+                        </Box>
+                      }
+                      placement="top"
+                      arrow
+                    >
+                      <IconButton 
+                        size="small" 
+                        sx={{ 
+                          p: 0.5,
+                          color: 'primary.main',
+                          '&:hover': {
+                            backgroundColor: 'primary.main',
+                            color: 'primary.contrastText'
+                          }
+                        }}
+                      >
+                        <RecordVoiceOverIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
                   )}
                 </Box>
               </div>

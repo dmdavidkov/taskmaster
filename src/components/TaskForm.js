@@ -21,6 +21,7 @@ import useWhisperStore from '../stores/whisperStore';
 import ChatBubbleIcon from '@mui/icons-material/ChatBubble';
 import TranslateIcon from '@mui/icons-material/Translate';
 import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
+import VoiceRecordDialog from './VoiceRecordDialog';
 
 const Backdrop = styled('div')({
   position: 'fixed',
@@ -83,61 +84,6 @@ const priorities = [
   { value: 'low', label: 'Low Priority', color: 'success.main' },
 ];
 
-const VoiceInputDialog = styled(Dialog)(({ theme }) => ({
-  '& .MuiDialog-paper': {
-    width: '100%',
-    maxWidth: 400,
-    backgroundColor: theme.palette.background.paper,
-    borderRadius: theme.shape.borderRadius * 2,
-    padding: theme.spacing(3),
-  },
-}));
-
-const RecordingIndicator = styled(Box)(({ theme }) => ({
-  width: 16,
-  height: 16,
-  borderRadius: '50%',
-  backgroundColor: theme.palette.error.main,
-  animation: 'pulse 1.5s ease-in-out infinite',
-  '@keyframes pulse': {
-    '0%': {
-      transform: 'scale(0.95)',
-      opacity: 0.9,
-    },
-    '50%': {
-      transform: 'scale(1.05)',
-      opacity: 0.5,
-    },
-    '100%': {
-      transform: 'scale(0.95)',
-      opacity: 0.9,
-    },
-  },
-}));
-
-const SpeechTooltip = styled(({ className, ...props }) => (
-  <Tooltip {...props} classes={{ popper: className }} />
-))(({ theme }) => ({
-  '& .MuiTooltip-tooltip': {
-    maxWidth: 400,
-    fontSize: '0.875rem',
-    backgroundColor: theme.palette.background.paper,
-    color: theme.palette.text.primary,
-    border: `1px solid ${theme.palette.divider}`,
-    boxShadow: theme.shadows[2],
-    padding: theme.spacing(1.5),
-    '& .language-tag': {
-      display: 'inline-block',
-      padding: '2px 6px',
-      backgroundColor: theme.palette.primary.main,
-      color: theme.palette.primary.contrastText,
-      borderRadius: theme.shape.borderRadius,
-      fontSize: '0.75rem',
-      marginBottom: theme.spacing(1)
-    }
-  }
-}));
-
 const TaskForm = ({ 
   task = null, 
   onSubmit, 
@@ -148,10 +94,10 @@ const TaskForm = ({
     worker,
     isModelLoaded,
     isLoading: whisperLoading,
-    transcribe,
-    hasCompletedSetup,
     error: whisperError
   } = useWhisperStore();
+
+  const isWhisperReady = isModelLoaded && !whisperLoading && !whisperError;
 
   // Get user's timezone
   const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -175,16 +121,10 @@ const TaskForm = ({
   });
 
   const [errors, setErrors] = useState({});
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingFor, setRecordingFor] = useState(null);
-  const [recordingStream, setRecordingStream] = useState(null);
-  const [audioChunks, setAudioChunks] = useState([]);
+  const [showVoiceDialog, setShowVoiceDialog] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState('en');
-  const recorderRef = React.useRef(null);
-  const [showSetupPrompt, setShowSetupPrompt] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [transcriptionError, setTranscriptionError] = useState(null);
   const [showOriginalText, setShowOriginalText] = useState(false);
+  const [activeVoiceField, setActiveVoiceField] = useState(null);
 
   const [windowSize, setWindowSize] = useState({
     width: window.innerWidth,
@@ -230,7 +170,7 @@ const TaskForm = ({
 
   useEffect(() => {
     if (task) {
-      setFormData({
+      const newFormData = {
         title: task.title || '',
         description: task.description || '',
         priority: typeof task.priority === 'object' ? task.priority.level : (task.priority || 'medium'),
@@ -238,13 +178,21 @@ const TaskForm = ({
         createdDate: task.createdDate ? utcToZonedTime(new Date(task.createdDate), userTimezone) : null,
         speechText: task.metadata?.speechText || '',
         language: task.metadata?.language || 'en'
-      });
+      };
+      // console.log('Setting form data from task:', newFormData);
+      setFormData(newFormData);
     } else {
-      setFormData(prev => ({
-        ...prev,
+      const newFormData = {
+        title: '',
+        description: '',
+        priority: 'medium',
         dueDate: getTomorrowDate(),
-        createdDate: zonedTimeToUtc(new Date(), userTimezone)
-      }));
+        createdDate: zonedTimeToUtc(new Date(), userTimezone),
+        speechText: '',
+        language: 'en'
+      };
+      console.log('Setting initial form data:', newFormData);
+      setFormData(newFormData);
     }
   }, [task, userTimezone]);
 
@@ -312,91 +260,25 @@ const TaskForm = ({
     handleClose();
   };
 
-  const startRecording = async (field) => {
-    if (!hasCompletedSetup || !isModelLoaded) {
-      setShowSetupPrompt(true);
-      return;
-    }
-
-    setRecordingFor(field);
-    let mediaStream = null;
-    try {
-      mediaStream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          channelCount: 1,
-          sampleRate: 16000,
-          echoCancellation: true,
-          noiseSuppression: true,
-        } 
-      });
-      setRecordingStream(mediaStream);
-      
-      let recorder;
-      try {
-        recorder = new MediaRecorder(mediaStream, {
-          mimeType: 'audio/webm;codecs=opus'
-        });
-      } catch (err) {
-        console.log('Falling back to default format');
-        recorder = new MediaRecorder(mediaStream);
-      }
-      
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          setAudioChunks(prev => [...prev, e.data]);
-        }
-      };
-      
-      recorderRef.current = recorder;
-      recorder.start(1000); // Collect data every second
-      setIsRecording(true);
-    } catch (err) {
-      console.error('Error setting up audio:', err);
-      if (mediaStream) {
-        mediaStream.getTracks().forEach(track => track.stop());
-      }
-    }
+  const handleVoiceClick = (field) => {
+    setActiveVoiceField(field);
+    setShowVoiceDialog(true);
   };
 
-  const stopRecording = async () => {
-    if (recorderRef.current && recorderRef.current.state === 'recording') {
-      recorderRef.current.stop();
-      recordingStream?.getTracks().forEach(track => track.stop());
-      setRecordingStream(null);
-      setIsRecording(false);
-      
-      // Process the recording
-      const currentChunks = [...audioChunks];
-      const audioBlob = new Blob(currentChunks, { type: 'audio/webm' });
-      
-      try {
-        setIsProcessing(true);
-        setTranscriptionError(null);
-        const processingContext = new AudioContext({ sampleRate: 16000 });
-        const arrayBuffer = await audioBlob.arrayBuffer();
-        const audioBuffer = await processingContext.decodeAudioData(arrayBuffer);
-        const audioData = audioBuffer.getChannelData(0);
-        
-        setAudioChunks([]);
-        
-        const text = await transcribe(audioData, selectedLanguage);
-        
-        if (recordingFor && text) {
-          setFormData(prev => ({
-            ...prev,
-            [recordingFor]: text.trim()
-          }));
-          setRecordingFor(null);
-        }
+  const handleVoiceDialogClose = () => {
+    setShowVoiceDialog(false);
+    setActiveVoiceField(null);
+  };
 
-        await processingContext.close();
-      } catch (err) {
-        console.error('Error processing audio:', err);
-        setTranscriptionError('Failed to process audio. Please try again.');
-      } finally {
-        setIsProcessing(false);
-      }
-    }
+  const handleTranscriptionComplete = (text, language) => {
+    setShowVoiceDialog(false);
+    setFormData(prev => ({
+      ...prev,
+      [activeVoiceField]: text,
+      language: language,
+      ...(activeVoiceField === 'title' ? { speechText: text } : {})
+    }));
+    setActiveVoiceField(null);
   };
 
   return (
@@ -404,38 +286,60 @@ const TaskForm = ({
       <FormContainer>
         <StyledPaper 
           onClick={(e) => e.stopPropagation()}
-          sx={{ visibility: isRecording || isProcessing ? 'hidden' : 'visible' }}
         >
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Typography variant="h6">
                 {task ? 'Edit Task' : 'New Task'}
               </Typography>
-              {formData.speechText && (
-                <SpeechTooltip
+              {formData.speechText && formData.speechText.trim() !== '' && (
+                <Tooltip
                   title={
                     <Box>
-                      <span className="language-tag">{formData.language.toUpperCase()}</span>
-                      <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                        {formData.speechText}
+                      <Box sx={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: 1, 
+                        mb: 1 
+                      }}>
+                        <TranslateIcon fontSize="small" />
+                        <Typography variant="caption" sx={{ 
+                          backgroundColor: 'primary.main',
+                          color: 'primary.contrastText',
+                          px: 1,
+                          py: 0.5,
+                          borderRadius: 1,
+                          fontWeight: 'bold'
+                        }}>
+                          {formData.language.toUpperCase()}
+                        </Typography>
+                      </Box>
+                      <Typography variant="body2" sx={{ 
+                        whiteSpace: 'pre-wrap',
+                        fontStyle: 'italic',
+                        color: 'text.secondary'
+                      }}>
+                        "{formData.speechText}"
                       </Typography>
                     </Box>
                   }
                   placement="right"
+                  arrow
                 >
                   <IconButton 
                     size="small" 
                     sx={{ 
-                      color: 'text.secondary',
+                      color: 'primary.main',
                       p: 0.5,
                       '&:hover': {
-                        color: 'primary.main'
+                        backgroundColor: 'primary.main',
+                        color: 'primary.contrastText'
                       }
                     }}
                   >
                     <RecordVoiceOverIcon fontSize="small" />
                   </IconButton>
-                </SpeechTooltip>
+                </Tooltip>
               )}
             </Box>
             <IconButton onClick={handleClose}>
@@ -444,52 +348,56 @@ const TaskForm = ({
           </Box>
           
           <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1 }}>
-            <TextField
-              fullWidth
-              label="Title"
-              name="title"
-              value={formData.title}
-              onChange={handleChange('title')}
-              error={Boolean(errors.title)}
-              helperText={errors.title}
-              margin="normal"
-              required
-              InputProps={{
-                endAdornment: (
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 2 }}>
+              <TextField
+                label="Title"
+                value={formData.title}
+                onChange={handleChange('title')}
+                error={Boolean(errors.title)}
+                helperText={errors.title}
+                fullWidth
+                required
+              />
+              <Tooltip title={isWhisperReady ? "Record voice" : "Loading speech recognition..."}>
+                <span>
                   <IconButton
+                    onClick={() => handleVoiceClick('title')}
                     color="primary"
-                    onClick={() => startRecording('title')}
-                    disabled={isRecording || !hasCompletedSetup || whisperLoading}
+                    size="small"
+                    disabled={!isWhisperReady}
                   >
-                    {isRecording && recordingFor === 'title' ? <StopIcon /> : <MicIcon />}
+                    <MicIcon />
                   </IconButton>
-                ),
-              }}
-            />
+                </span>
+              </Tooltip>
+            </Box>
 
-            <TextField
-              fullWidth
-              label="Description"
-              name="description"
-              value={formData.description}
-              onChange={handleChange('description')}
-              error={Boolean(errors.description)}
-              helperText={errors.description}
-              margin="normal"
-              multiline
-              rows={4}
-              InputProps={{
-                endAdornment: (
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', mb: 2 }}>
+              <TextField
+                fullWidth
+                label="Description"
+                name="description"
+                value={formData.description}
+                onChange={handleChange('description')}
+                error={Boolean(errors.description)}
+                helperText={errors.description}
+                multiline
+                rows={4}
+              />
+              <Tooltip title={isWhisperReady ? "Record voice" : "Loading speech recognition..."}>
+                <span>
                   <IconButton
+                    onClick={() => handleVoiceClick('description')}
                     color="primary"
-                    onClick={() => startRecording('description')}
-                    disabled={isRecording || !hasCompletedSetup || whisperLoading}
+                    size="small"
+                    disabled={!isWhisperReady}
+                    sx={{ mt: 1 }}
                   >
-                    {isRecording && recordingFor === 'description' ? <StopIcon /> : <MicIcon />}
+                    <MicIcon />
                   </IconButton>
-                ),
-              }}
-            />
+                </span>
+              </Tooltip>
+            </Box>
 
             <TextField
               select
@@ -557,61 +465,12 @@ const TaskForm = ({
         </StyledPaper>
       </FormContainer>
 
-      <VoiceInputDialog
-        open={isRecording || isProcessing}
-        onClose={() => {
-          if (!isProcessing && !isRecording) {
-            stopRecording();
-          }
-        }}
-        keepMounted={false}
-        disablePortal={false}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <DialogContent onClick={(e) => e.stopPropagation()}>
-          <Box sx={{ 
-            display: 'flex', 
-            flexDirection: 'column', 
-            alignItems: 'center', 
-            gap: 2,
-            py: 2
-          }}>
-            {isRecording ? (
-              <>
-                <RecordingIndicator />
-                <Typography>
-                  Recording {recordingFor === 'title' ? 'title' : 'description'}...
-                </Typography>
-                <Button
-                  variant="contained"
-                  color="error"
-                  startIcon={<StopIcon />}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    stopRecording();
-                  }}
-                  tabIndex={0}
-                >
-                  Stop Recording
-                </Button>
-              </>
-            ) : isProcessing && (
-              <>
-                <CircularProgress />
-                <Typography>
-                  Processing audio...
-                </Typography>
-              </>
-            )}
-            
-            {transcriptionError && (
-              <Alert severity="error" sx={{ mt: 2 }}>
-                {transcriptionError}
-              </Alert>
-            )}
-          </Box>
-        </DialogContent>
-      </VoiceInputDialog>
+      <VoiceRecordDialog
+        open={showVoiceDialog}
+        onClose={handleVoiceDialogClose}
+        onTranscriptionComplete={handleTranscriptionComplete}
+        autoStartRecording={true}
+      />
     </Backdrop>
   );
 };

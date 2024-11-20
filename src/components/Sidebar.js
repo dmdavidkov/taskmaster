@@ -27,6 +27,9 @@ import CircularProgress from '@mui/material/CircularProgress';
 import SettingsIcon from '@mui/icons-material/Settings';
 import Divider from '@mui/material/Divider';
 import Settings from './Settings';
+import Snackbar from '@mui/material/Snackbar';
+import Alert from '@mui/material/Alert';
+import VoiceRecordDialog from './VoiceRecordDialog';
 
 const drawerWidth = 280;
 
@@ -81,39 +84,87 @@ const SearchTextField = styled(TextField)(({ theme }) => ({
 }));
 
 const menuItems = [
-  { id: 'all', text: 'Open Tasks', icon: <AllInboxIcon /> },
-  { id: 'today', text: 'Today', icon: <TodayIcon /> },
-  { id: 'upcoming', text: 'Upcoming', icon: <UpcomingIcon /> },
-  { id: 'priority', text: 'Priority', icon: <FlagIcon /> },
-  { id: 'completed', text: 'Completed', icon: <DoneAllIcon /> },
+  { id: 0, text: 'Open Tasks', icon: <AllInboxIcon /> },
+  { id: 1, text: 'Today', icon: <TodayIcon /> },
+  { id: 2, text: 'Upcoming', icon: <UpcomingIcon /> },
+  { id: 3, text: 'Priority', icon: <FlagIcon /> },
+  { id: 4, text: 'Completed', icon: <DoneAllIcon /> },
 ];
 
 const Sidebar = ({ 
-  selectedTab = 'all',
+  selectedTab = 0,
   searchQuery = '',
   onTabChange,
   onSearchChange,
   onAddTask,
 }) => {
   const [version, setVersion] = useState('');
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [recordingStream, setRecordingStream] = useState(null);
-  const [audioChunks, setAudioChunks] = useState([]);
-  const recorderRef = React.useRef(null);
-  
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isVoiceDialogOpen, setIsVoiceDialogOpen] = useState(false);
+  const [notification, setNotification] = useState(null);
   const { 
     transcribe,
     isModelLoaded,
     isLoading: whisperLoading,
-    error: whisperError
+    error: whisperError,
+    selectedLanguage 
   } = useWhisperStore();
 
   const isWhisperReady = isModelLoaded && !whisperLoading && !whisperError;
 
-  // Get the selected language from localStorage
-  const selectedLanguage = localStorage.getItem('whisperLanguage') || 'en';
+  const handleCloseSnackbar = () => {
+    setNotification(null);
+  };
+
+  const showNotification = (message, severity = 'error') => {
+    setNotification({
+      open: true,
+      message,
+      severity
+    });
+  };
+
+  const handleSettingsClick = (tab = 0) => {
+    setIsSettingsOpen(true);
+  };
+
+  const handleSettingsClose = () => {
+    setIsSettingsOpen(false);
+  };
+
+  const handleVoiceClick = () => {
+    if (!isWhisperReady) {
+      showNotification('Please wait for the speech recognition model to load.', 'info');
+      return;
+    }
+    setIsVoiceDialogOpen(true);
+  };
+
+  const handleVoiceDialogClose = () => {
+    setIsVoiceDialogOpen(false);
+  };
+
+  const handleTranscriptionComplete = async (text, language) => {
+    try {
+      const taskData = await processTranscription(text, text, language);
+      if (taskData?.title) {
+        onAddTask(taskData);
+      }
+    } catch (err) {
+      console.error('Error processing task with LLM:', err);
+      
+      if (err.message?.includes('AI service not initialized')) {
+        showNotification('Please configure the AI Service in Settings to use voice commands.');
+        handleSettingsClick(1);
+      } else if (err.message?.includes('authentication failed')) {
+        showNotification('AI service authentication failed. Please check your API key in Settings.');
+        handleSettingsClick(1);
+      } else {
+        showNotification(err.message);
+      }
+    }
+    setIsVoiceDialogOpen(false);
+  };
 
   useEffect(() => {
     // Get app version on component mount
@@ -121,99 +172,6 @@ const Sidebar = ({
       window.electron.app.getVersion().then(setVersion).catch(console.error);
     }
   }, []);
-
-  const handleSettingsClick = () => {
-    setSettingsOpen(true);
-  };
-
-  const handleSettingsClose = () => {
-    setSettingsOpen(false);
-  };
-
-  const startRecording = async () => {
-    if (!isWhisperReady) {
-      alert('Please setup Whisper in Settings first');
-      setSettingsOpen(true);
-      return;
-    }
-
-    let mediaStream = null;
-    try {
-      mediaStream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          channelCount: 1,
-          sampleRate: 16000,
-          echoCancellation: true,
-          noiseSuppression: true,
-        } 
-      });
-      setRecordingStream(mediaStream);
-      
-      const recorder = new MediaRecorder(mediaStream, {
-        mimeType: 'audio/webm;codecs=opus'
-      });
-      
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          setAudioChunks(prev => [...prev, e.data]);
-        }
-      };
-      
-      recorderRef.current = recorder;
-      recorder.start(1000);
-      setIsRecording(true);
-    } catch (err) {
-      console.error('Error setting up audio:', err);
-      if (mediaStream) {
-        mediaStream.getTracks().forEach(track => track.stop());
-      }
-    }
-  };
-
-  const stopRecording = async () => {
-    try {
-      setIsProcessing(true);
-      if (recorderRef.current) {
-        recorderRef.current.stop();
-      }
-      if (recordingStream) {
-        recordingStream.getTracks().forEach(track => track.stop());
-      }
-      
-      const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-      const arrayBuffer = await audioBlob.arrayBuffer();
-      
-      // Convert ArrayBuffer to AudioBuffer then to Float32Array
-      const audioContext = new AudioContext({ sampleRate: 16000 });
-      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-      const audioData = audioBuffer.getChannelData(0);
-      
-      // Pass the selected language to transcribe
-      const text = await transcribe(audioData, selectedLanguage);
-      if (text) {
-        try {
-          // Pass both the text and original language to processTranscription
-          const taskData = await processTranscription(text, text, selectedLanguage);
-          if (taskData && taskData.title) {
-            onAddTask(taskData);
-          } else {
-            console.error('Invalid task data received:', taskData);
-          }
-        } catch (err) {
-          console.error('Error processing transcription:', err);
-        }
-      }
-      
-      // Clean up audio context
-      await audioContext.close();
-    } catch (err) {
-      console.error('Error processing audio:', err);
-    } finally {
-      setIsProcessing(false);
-      setIsRecording(false);
-      setAudioChunks([]);
-    }
-  };
 
   return (
     <>
@@ -243,7 +201,7 @@ const Sidebar = ({
               TaskMaster
             </Typography>
 
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 2 }}>
+            <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
               <Button
                 variant="contained"
                 startIcon={<AddIcon />}
@@ -253,28 +211,20 @@ const Sidebar = ({
               >
                 Add Task
               </Button>
-              <StyledIconButton
+              <IconButton
                 color="primary"
-                disabled={(!isWhisperReady && !isRecording) || isProcessing}
-                onClick={isRecording ? stopRecording : startRecording}
-                sx={{
+                onClick={handleVoiceClick}
+                disabled={!isWhisperReady}
+                sx={{ 
                   borderRadius: 2,
-                  backgroundColor: isRecording ? 'error.main' : 'transparent',
+                  backgroundColor: theme => isWhisperReady ? theme.palette.action.hover : theme.palette.action.disabledBackground,
                   '&:hover': {
-                    backgroundColor: isRecording 
-                      ? 'error.dark'
-                      : 'action.hover',
-                  },
+                    backgroundColor: theme => isWhisperReady ? theme.palette.action.selected : theme.palette.action.disabledBackground,
+                  }
                 }}
               >
-                {isProcessing ? (
-                  <CircularProgress size={24} />
-                ) : isRecording ? (
-                  <StopIcon />
-                ) : (
-                  <MicIcon />
-                )}
-              </StyledIconButton>
+                <MicIcon />
+              </IconButton>
             </Box>
 
             <SearchTextField
@@ -339,9 +289,32 @@ const Sidebar = ({
         </Box>
       </StyledDrawer>
 
+      <Snackbar
+        open={notification?.open}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert 
+          onClose={handleCloseSnackbar} 
+          severity={notification?.severity}
+          sx={{ width: '100%' }}
+        >
+          {notification?.message}
+        </Alert>
+      </Snackbar>
+      
       <Settings 
-        open={settingsOpen} 
+        open={isSettingsOpen} 
         onClose={handleSettingsClose}
+      />
+
+      <VoiceRecordDialog
+        open={isVoiceDialogOpen}
+        onClose={handleVoiceDialogClose}
+        onTranscriptionComplete={handleTranscriptionComplete}
+        showLanguageSelect={false}
+        autoStartRecording={true}
       />
     </>
   );

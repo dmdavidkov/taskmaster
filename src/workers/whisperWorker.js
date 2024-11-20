@@ -41,14 +41,29 @@ class AutomaticSpeechRecognitionPipeline {
             model_id: this.model_id
         };
 
-        this.model ??= WhisperForConditionalGeneration.from_pretrained(modelConfig.model_id, {
-            dtype: {
-                encoder_model: modelConfig.encoder_model,
-                decoder_model_merged: modelConfig.decoder_model_merged,
-            },
-            device: 'webgpu',
-            progress_callback,
-        });
+        // Try WebGPU first, fallback to CPU if not available
+        if (!this.model) {
+            try {
+                this.model = await WhisperForConditionalGeneration.from_pretrained(modelConfig.model_id, {
+                    dtype: {
+                        encoder_model: modelConfig.encoder_model,
+                        decoder_model_merged: modelConfig.decoder_model_merged,
+                    },
+                    device: 'webgpu',
+                    progress_callback,
+                });
+            } catch (error) {
+                console.log('WebGPU not available, falling back to CPU');
+                this.model = await WhisperForConditionalGeneration.from_pretrained(modelConfig.model_id, {
+                    dtype: {
+                        encoder_model: 'fp32',
+                        decoder_model_merged: 'fp32',
+                    },
+                    device: 'wasm',
+                    progress_callback,
+                });
+            }
+        }
 
         return Promise.all([this.tokenizer, this.processor, this.model]);
     }
@@ -99,6 +114,7 @@ async function transcribe(audio, language, config) {
             status: 'error',
             error: error.message
         });
+        throw error;
     } finally {
         processing = false;
     }
@@ -155,66 +171,70 @@ async function load(config) {
             }
         };
 
-        // Reset pipeline
-        pipeline = null;
-        
-        // Start initialization
-        console.log('Starting model initialization');
-        self.postMessage({ 
-            status: 'progress', 
-            progress: 0, 
-            stage: 'downloading',
-            cached: true
-        });
+        // Reset pipeline only if we don't have one or if config is provided
+        if (!pipeline || config) {
+            pipeline = null;
+            
+            // Start initialization
+            console.log('Starting model initialization');
+            self.postMessage({ 
+                status: 'progress', 
+                progress: 0, 
+                stage: 'downloading',
+                cached: true
+            });
 
-        try {
-            const [tokenizer, processor, model] = await AutomaticSpeechRecognitionPipeline.getInstance(progress_callback, config);
+            try {
+                const [tokenizer, processor, model] = await AutomaticSpeechRecognitionPipeline.getInstance(progress_callback, config);
 
-            // If we got any real progress events, it wasn't cached
-            if (hasProgress) {
-                console.log('Model downloaded');
-            } else {
-                console.log('Model loaded from cache');
+                // If we got any real progress events, it wasn't cached
+                if (hasProgress) {
+                    console.log('Model downloaded');
+                } else {
+                    console.log('Model loaded from cache');
+                }
+                
+                currentStage = 'loading';
+                console.log('Moving to loading stage...');
+                self.postMessage({ 
+                    status: 'progress', 
+                    progress: 0, 
+                    stage: 'loading',
+                    cached: !hasProgress
+                });
+                
+                console.log('Initializing pipeline...');
+                pipeline = { tokenizer, processor, model };
+                
+                currentStage = 'preparing';
+                console.log('Preparing model for inference...');
+                self.postMessage({ 
+                    status: 'progress', 
+                    progress: 0, 
+                    stage: 'preparing'
+                });
+                
+                console.log('Model loading complete');
+                self.postMessage({ status: 'ready' });
+            } catch (error) {
+                console.error('Error loading model:', error);
+                self.postMessage({ 
+                    status: 'error',
+                    error: error.message
+                });
+                throw error;
             }
-            
-            currentStage = 'loading';
-            console.log('Moving to loading stage...');
-            self.postMessage({ 
-                status: 'progress', 
-                progress: 0, 
-                stage: 'loading',
-                cached: !hasProgress
-            });
-            
-            console.log('Initializing pipeline...');
-            pipeline = { tokenizer, processor, model };
-            
-            currentStage = 'preparing';
-            console.log('Preparing model for inference...');
-            self.postMessage({ 
-                status: 'progress', 
-                progress: 0, 
-                stage: 'preparing'
-            });
-            
-            console.log('Model loading complete');
-            
+        } else {
+            // If pipeline exists and no new config, just report ready
             self.postMessage({ status: 'ready' });
-        } catch (e) {
-            console.error('Error loading model:', e);
-            self.postMessage({ 
-                status: 'error', 
-                error: `Failed to load model: ${e.message}` 
-            });
-            throw e;
         }
-    } catch (e) {
-        console.error('Error in load():', e);
+    } catch (error) {
+        console.error('Error in load():', error);
         self.postMessage({ 
-            status: 'error', 
-            error: `Failed to initialize: ${e.message}` 
+            status: 'error',
+            error: error.message
         });
-        throw e;
+        throw error;
     }
 }
 

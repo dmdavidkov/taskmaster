@@ -8,11 +8,15 @@ const createSubscription = (channel, callback) => {
 };
 
 contextBridge.exposeInMainWorld('electron', {
+  ipcRenderer: {
+    invoke: (channel, ...args) => ipcRenderer.invoke(channel, ...args),
+  },
   env: {
     REACT_APP_NEBIUS_API_KEY: process.env.REACT_APP_NEBIUS_API_KEY,
   },
   ai: {
-    processTaskText: (text, language) => ipcRenderer.invoke('extract-task', text, language),
+    processText: (params) => ipcRenderer.invoke('ai:processText', params),
+    testConnection: (config) => ipcRenderer.invoke('ai:testConnection', config)
   },
   store: {
     get: (key) => ipcRenderer.invoke('get-store-value', key),
@@ -41,9 +45,13 @@ contextBridge.exposeInMainWorld('electron', {
   app: {
     getVersion: () => ipcRenderer.invoke('get-app-version'),
   },
+  preferences: {
+    get: (key) => ipcRenderer.invoke('preferences:get', key),
+    set: (key, value) => ipcRenderer.invoke('preferences:set', key, value)
+  },
   window: {
     minimize: () => ipcRenderer.invoke('window-control', 'minimize'),
     maximize: () => ipcRenderer.invoke('window-control', 'maximize'),
     close: () => ipcRenderer.invoke('window-control', 'close'),
-  },
+  }
 });

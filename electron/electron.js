@@ -5,6 +5,24 @@ const log = require('electron-log');
 const Store = require('electron-store');
 const store = new Store();
 
+// Initialize store defaults for AI service
+store.set('aiService', store.get('aiService', {
+  baseURL: 'https://api.studio.nebius.ai/v1/',
+  apiKey: '',
+  modelName: 'Qwen/Qwen2.5-72B-Instruct-fast'
+}));
+
+// Add store methods to window.webContents
+const initializePreferences = (window) => {
+  window.webContents.getPreference = (key) => {
+    return store.get(`aiService.${key}`);
+  };
+  
+  window.webContents.setPreference = (key, value) => {
+    store.set(`aiService.${key}`, value);
+  };
+};
+
 // Handle creating/removing shortcuts on Windows when installing/uninstalling
 if (require('electron-squirrel-startup')) {
   app.quit();
@@ -14,14 +32,11 @@ if (require('electron-squirrel-startup')) {
 // Load environment variables first
 require('dotenv').config();
 
-// Initialize AI Service
-require('./services/aiService');
-
 let mainWindow;
 let updateCheckInProgress = false;
 
 // Check if we're in development mode
-const isDev = process.env.NODE_ENV === 'development';
+const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
 // Configure logging only in development
 if (isDev) {
@@ -32,6 +47,9 @@ if (isDev) {
 
 // Get package.json for app version
 const packageJson = require('../package.json');
+
+// Initialize AI Service after app is ready
+let aiService;
 
 function createWindow() {
   // Create the browser window.
@@ -52,6 +70,9 @@ function createWindow() {
     },
     backgroundColor: '#ffffff',
   });
+
+  // Initialize preferences for this window
+  initializePreferences(mainWindow);
 
   // Set Content Security Policy
   mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
@@ -99,9 +120,11 @@ function createWindow() {
       app.quit();
     });
 
-  // Open DevTools in development
+  // Open DevTools in development after window is loaded
   if (isDev) {
-    mainWindow.webContents.openDevTools();
+    mainWindow.webContents.on('did-finish-load', () => {
+      mainWindow.webContents.openDevTools();
+    });
   }
 
   // Optimize memory usage
@@ -118,7 +141,16 @@ function createWindow() {
 }
 
 // This method will be called when Electron has finished initialization
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // Initialize AI service first
+  try {
+    aiService = require('./services/aiService');
+    await aiService.initialize();
+    log.info('AI Service initialized successfully');
+  } catch (error) {
+    log.error('Failed to initialize AI service:', error);
+  }
+  
   createWindow();
   
   if (app.isPackaged) {
@@ -304,6 +336,15 @@ ipcMain.handle('delete-task', (_, taskId) => {
 ipcMain.handle('save-tasks', (_, tasks) => {
   store.set('tasks', tasks);
   return true;
+});
+
+// Add IPC handlers for preferences
+ipcMain.handle('preferences:get', (event, key) => {
+  return store.get(`aiService.${key}`);
+});
+
+ipcMain.handle('preferences:set', (event, key, value) => {
+  store.set(`aiService.${key}`, value);
 });
 
 // Window control handlers
