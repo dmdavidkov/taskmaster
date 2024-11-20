@@ -293,7 +293,7 @@ function App() {
                         </InputAdornment>
                       }
                     >
-                      <MenuItem value="">Default Order</MenuItem>
+                      <MenuItem value="">Created On (Newest First)</MenuItem>
                       <MenuItem value="priority">Priority (High → Low)</MenuItem>
                       <MenuItem value="dueDate">Due Date (Earliest First)</MenuItem>
                       <MenuItem value="name">Name (A to Z)</MenuItem>

@@ -84,15 +84,15 @@ const SearchTextField = styled(TextField)(({ theme }) => ({
 }));
 
 const menuItems = [
-  { id: 0, text: 'Open Tasks', icon: <AllInboxIcon /> },
-  { id: 1, text: 'Today', icon: <TodayIcon /> },
-  { id: 2, text: 'Upcoming', icon: <UpcomingIcon /> },
-  { id: 3, text: 'Priority', icon: <FlagIcon /> },
-  { id: 4, text: 'Completed', icon: <DoneAllIcon /> },
+  { id: 'all', text: 'Open Tasks', icon: <AllInboxIcon /> },
+  { id: 'today', text: 'Today', icon: <TodayIcon /> },
+  { id: 'upcoming', text: 'Upcoming', icon: <UpcomingIcon /> },
+  { id: 'priority', text: 'Priority', icon: <FlagIcon /> },
+  { id: 'completed', text: 'Completed', icon: <DoneAllIcon /> },
 ];
 
 const Sidebar = ({ 
-  selectedTab = 0,
+  selectedTab = 'all',
   searchQuery = '',
   onTabChange,
   onSearchChange,

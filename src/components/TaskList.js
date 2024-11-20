@@ -86,8 +86,7 @@ const TaskList = ({
     try {
       // Convert UTC to local time for comparison
       const localDate = utcToZonedTime(new Date(date), userTimezone);
-      const today = new Date();
-      return startOfDay(localDate) <= today && endOfDay(localDate) >= today;
+      return isToday(localDate);
     } catch (error) {
       console.error('Error checking if task is today:', error);
       return false;
@@ -99,8 +98,8 @@ const TaskList = ({
     try {
       // Convert UTC to local time for comparison
       const localDate = utcToZonedTime(new Date(date), userTimezone);
-      const today = new Date();
-      return localDate > today;
+      const today = startOfDay(new Date());
+      return localDate > today && isFuture(localDate);
     } catch (error) {
       console.error('Error checking if task is upcoming:', error);
       return false;
@@ -123,11 +122,12 @@ const TaskList = ({
         case 'completed':
           return task.completed && matchesSearch;
         case 'today':
-          return task.dueDate && isTaskToday(task.dueDate) && !task.completed && matchesSearch;
+          return !task.completed && isTaskToday(task.dueDate) && matchesSearch;
         case 'upcoming':
-          return task.dueDate && isTaskUpcoming(task.dueDate) && !task.completed && matchesSearch;
+          return !task.completed && isTaskUpcoming(task.dueDate) && matchesSearch;
         case 'priority':
-          return task.priority === 'high' && !task.completed && matchesSearch;
+          const priority = typeof task.priority === 'object' ? task.priority.level : task.priority;
+          return !task.completed && (priority?.toLowerCase() === 'high' || priority?.toLowerCase() === 'critical') && matchesSearch;
         default:
           return matchesSearch;
       }
@@ -137,25 +137,34 @@ const TaskList = ({
     switch (sortBy) {
       case 'priority':
         return [...filtered].sort((a, b) => {
-          const priorityOrder = { high: 0, medium: 1, low: 2 };
-          const aPriority = a?.priority || 'low';
-          const bPriority = b?.priority || 'low';
+          const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+          // Handle both string and object priority formats
+          const aPriority = (typeof a?.priority === 'object' ? a?.priority?.level : a?.priority)?.toLowerCase() || 'low';
+          const bPriority = (typeof b?.priority === 'object' ? b?.priority?.level : b?.priority)?.toLowerCase() || 'low';
           return priorityOrder[aPriority] - priorityOrder[bPriority];
         });
       case 'dueDate':
         return [...filtered].sort((a, b) => {
           if (!a?.dueDate) return 1;
           if (!b?.dueDate) return -1;
-          return new Date(a.dueDate) - new Date(b.dueDate);
+          // Convert dates to local timezone for comparison
+          const aDate = utcToZonedTime(new Date(a.dueDate), userTimezone);
+          const bDate = utcToZonedTime(new Date(b.dueDate), userTimezone);
+          return aDate - bDate;
         });
       case 'name':
         return [...filtered].sort((a, b) => {
-          const aTitle = (a?.title || '').toLowerCase();
-          const bTitle = (b?.title || '').toLowerCase();
+          const aTitle = (a?.title || '').toLowerCase().trim();
+          const bTitle = (b?.title || '').toLowerCase().trim();
           return aTitle.localeCompare(bTitle);
         });
       default:
-        return filtered;
+        // Sort by createdAt timestamp (newest first)
+        return [...filtered].sort((a, b) => {
+          const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return bTime - aTime; // Descending order (newest first)
+        });
     }
   }, [tasks, selectedTab, searchQuery, sortBy]);
 

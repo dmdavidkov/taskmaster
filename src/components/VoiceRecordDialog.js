@@ -1,20 +1,28 @@
-import React, { useState, useRef, useEffect } from 'react';
-import Dialog from '@mui/material/Dialog';
-import DialogContent from '@mui/material/DialogContent';
-import IconButton from '@mui/material/IconButton';
-import MicIcon from '@mui/icons-material/Mic';
-import StopIcon from '@mui/icons-material/Stop';
-import CircularProgress from '@mui/material/CircularProgress';
-import Alert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { 
+  Dialog, 
+  DialogContent, 
+  IconButton, 
+  Typography, 
+  Box, 
+  Alert,
+  Chip,
+  CircularProgress,
+  Paper
+} from '@mui/material';
+import { 
+  Mic as MicIcon, 
+  Stop as StopIcon,
+  Language as LanguageIcon
+} from '@mui/icons-material';
+import AudioVisualizer from './AudioVisualizer';
 import useWhisperStore from '../stores/whisperStore';
 
 const VoiceRecordDialog = ({ 
   open, 
   onClose, 
-  onTranscriptionComplete,
-  autoStartRecording = false
+  onTranscriptionComplete, 
+  autoStart = true 
 }) => {
   const { 
     worker,
@@ -26,56 +34,87 @@ const VoiceRecordDialog = ({
   } = useWhisperStore();
 
   const [isRecording, setIsRecording] = useState(false);
-  const [recordingStream, setRecordingStream] = useState(null);
-  const [audioChunks, setAudioChunks] = useState([]);
-  const recorderRef = useRef(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [transcriptionError, setTranscriptionError] = useState(null);
   const [transcribedText, setTranscribedText] = useState('');
+  const [transcriptionError, setTranscriptionError] = useState('');
   const [processingState, setProcessingState] = useState('');
+  const [audioStream, setAudioStream] = useState(null);
 
-  useEffect(() => {
-    if (open) {
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      setAudioStream(stream);
+      
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        setIsProcessing(true);
+        setProcessingState('Processing audio...');
+        
+        try {
+          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+          const audioData = await processAudioData(audioBlob);
+          console.log('Transcribing with language:', selectedLanguage);
+          const text = await transcribe(audioData, selectedLanguage);
+          setTranscribedText(text);
+          onTranscriptionComplete?.(text, selectedLanguage);
+        } catch (error) {
+          console.error('Transcription error:', error);
+          setTranscriptionError('Failed to transcribe audio. Please try again.');
+        } finally {
+          setIsProcessing(false);
+          setProcessingState('');
+        }
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      setTranscriptionError('');
+    } catch (error) {
+      console.error('Error starting recording:', error);
+      setTranscriptionError('Failed to access microphone. Please check permissions.');
+    }
+  }, [selectedLanguage, onTranscriptionComplete, transcribe]);
+
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
       setIsRecording(false);
-      setRecordingStream(null);
-      setAudioChunks([]);
-      setIsProcessing(false);
-      setTranscriptionError(null);
-      setTranscribedText('');
-      setProcessingState('');
-
-      // Start recording automatically if enabled and model is ready
-      if (autoStartRecording && isModelLoaded && !whisperLoading && !whisperError) {
-        // Small delay to ensure UI is ready
-        setTimeout(() => {
-          startRecording();
-        }, 100);
+      
+      if (audioStream) {
+        audioStream.getTracks().forEach(track => track.stop());
+        setAudioStream(null);
       }
     }
-  }, [open, autoStartRecording, isModelLoaded, whisperLoading, whisperError]);
+  }, [isRecording, audioStream]);
 
-  useEffect(() => {
-    // No-op, removed previous auto-start effect
-  }, []);
+  const handleClose = useCallback(() => {
+    if (isRecording) {
+      stopRecording();
+    }
+    setTranscribedText('');
+    setTranscriptionError('');
+    onClose?.();
+  }, [isRecording, stopRecording, onClose]);
 
   const processAudioData = async (audioBlob) => {
     try {
-      setProcessingState('Converting audio...');
-      // Convert Blob to ArrayBuffer
       const arrayBuffer = await audioBlob.arrayBuffer();
-      
-      // Create AudioContext with correct sample rate
       const audioContext = new AudioContext({ sampleRate: 16000 });
-      
-      // Decode audio data
       const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-      
-      // Get the Float32Array data
       const audioData = audioBuffer.getChannelData(0);
-      
-      // Clean up
       await audioContext.close();
-      
       return audioData;
     } catch (error) {
       console.error('Error processing audio:', error);
@@ -83,131 +122,256 @@ const VoiceRecordDialog = ({
     }
   };
 
-  const startRecording = async () => {
-    // Don't start if model isn't ready
-    if (!isModelLoaded || whisperLoading || whisperError) {
-      setTranscriptionError('Please wait for the speech recognition model to load.');
-      return;
+  useEffect(() => {
+    if (open && autoStart && isModelLoaded && !whisperLoading && !whisperError) {
+      // Small delay to ensure dialog is fully mounted
+      const timer = setTimeout(() => {
+        startRecording();
+      }, 300);
+      return () => clearTimeout(timer);
     }
+  }, [open, autoStart, isModelLoaded, whisperLoading, whisperError, startRecording]);
 
-    try {
-      setProcessingState('Starting recording...');
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      setRecordingStream(stream);
-      
-      const mediaRecorder = new MediaRecorder(stream);
-      recorderRef.current = mediaRecorder;
-      
-      const chunks = [];
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          chunks.push(e.data);
-        }
-      };
-      
-      mediaRecorder.onstop = async () => {
-        setIsProcessing(true);
-        try {
-          setProcessingState('Processing audio...');
-          const audioBlob = new Blob(chunks, { type: 'audio/webm' });
-          const audioData = await processAudioData(audioBlob);
-          
-          setProcessingState('Transcribing...');
-          const text = await transcribe(audioData, selectedLanguage);
-          setTranscribedText(text);
-          
-          setProcessingState('Creating task...');
-          onTranscriptionComplete(text, selectedLanguage);
-        } catch (error) {
-          console.error('Transcription error:', error);
-          setTranscriptionError(error.message);
-          setIsProcessing(false);
-        }
-      };
-      
-      setAudioChunks([]);
-      mediaRecorder.start();
-      setIsRecording(true);
-      setTranscriptionError(null);
+  useEffect(() => {
+    if (!open) {
+      // Cleanup when dialog closes
+      if (isRecording) {
+        stopRecording();
+      }
       setTranscribedText('');
-      setProcessingState('Recording...');
-    } catch (error) {
-      console.error('Error starting recording:', error);
-      setTranscriptionError(error.message);
+      setTranscriptionError('');
+      setProcessingState('');
     }
-  };
-
-  const stopRecording = () => {
-    if (recorderRef.current && recorderRef.current.state === 'recording') {
-      recorderRef.current.stop();
-      setIsRecording(false);
-    }
-    
-    if (recordingStream) {
-      recordingStream.getTracks().forEach(track => track.stop());
-      setRecordingStream(null);
-    }
-  };
-
-  const handleClose = () => {
-    stopRecording();
-    setIsRecording(false);
-    setRecordingStream(null);
-    setAudioChunks([]);
-    setIsProcessing(false);
-    setTranscriptionError(null);
-    setTranscribedText('');
-    setProcessingState('');
-    onClose();
-  };
+  }, [open, isRecording, stopRecording]);
 
   return (
-    <Dialog 
-      open={open} 
+    <Dialog
+      open={open}
       onClose={handleClose}
-      onClick={(e) => e.stopPropagation()}
+      maxWidth={false}
       PaperProps={{
         sx: {
-          minWidth: '300px',
-          maxWidth: '400px'
+          position: 'fixed',
+          width: '100vw',
+          height: '100vh',
+          maxWidth: 'none !important',
+          maxHeight: 'none',
+          m: 0,
+          p: 0,
+          bgcolor: 'rgba(255, 255, 255, 0.15)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          boxShadow: 'none',
+          pointerEvents: 'none',
+          '&::before': {
+            content: '""',
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            zIndex: -1
+          },
+          '& .MuiDialogContent-root': {
+            pointerEvents: 'auto'
+          }
+        }
+      }}
+      sx={{
+        bgcolor: 'transparent',
+        '& .MuiBackdrop-root': {
+          bgcolor: 'rgba(0, 0, 0, 0.2)'
         }
       }}
     >
-      <DialogContent onClick={(e) => e.stopPropagation()}>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center', py: 2 }}>
+      <DialogContent 
+        sx={{ 
+          position: 'relative',
+          zIndex: 1,
+          p: 3,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '100%',
+          gap: 2
+        }}
+      >
+        {/* Language Selection */}
+        <Box sx={{ position: 'absolute', top: 16, right: 16 }}>
+          <Chip
+            icon={<LanguageIcon />}
+            label={selectedLanguage}
+            color="primary"
+            size="small"
+          />
+        </Box>
+
+        {/* Central Content Area */}
+        <Box sx={{ 
+          flex: 1,
+          width: '100%',
+          maxWidth: '600px',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'flex-start',
+          alignItems: 'center',
+          gap: 2,
+          mt: '15%', 
+          mb: 'auto'
+        }}>
+          {/* Status Messages */}
+          {whisperError && (
+            <Alert severity="error" sx={{ width: '100%' }}>
+              {whisperError}
+            </Alert>
+          )}
+          
           {transcriptionError && (
             <Alert severity="error" sx={{ width: '100%' }}>
               {transcriptionError}
             </Alert>
           )}
 
-          {(whisperLoading || isProcessing) && (
-            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
-              <CircularProgress size={24} />
-              <Typography variant="body2" color="text.secondary">
-                {processingState}
-              </Typography>
-            </Box>
+          {/* Processing State */}
+          {processingState && (
+            <Paper
+              elevation={0}
+              sx={{
+                p: 3,
+                width: '100%',
+                bgcolor: (theme) => theme.palette.mode === 'dark' 
+                  ? 'rgba(0, 0, 0, 0.85)'
+                  : 'rgba(255, 255, 255, 0.9)',
+                backdropFilter: 'blur(10px)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 2,
+                borderRadius: 2,
+                border: '1px solid',
+                borderColor: (theme) => theme.palette.mode === 'dark'
+                  ? 'rgba(255, 255, 255, 0.15)'
+                  : 'rgba(0, 0, 0, 0.1)',
+                boxShadow: (theme) => theme.palette.mode === 'dark'
+                  ? '0 4px 20px rgba(0, 0, 0, 0.6)'
+                  : '0 4px 20px rgba(0, 0, 0, 0.1)'
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <CircularProgress size={24} />
+                <Typography 
+                  variant="body1" 
+                  sx={{ 
+                    color: (theme) => theme.palette.mode === 'dark'
+                      ? 'rgba(255, 255, 255, 0.95)'
+                      : 'rgba(0, 0, 0, 0.9)',
+                    fontWeight: 500
+                  }}
+                >
+                  {processingState}
+                </Typography>
+              </Box>
+            </Paper>
           )}
 
-          <IconButton
-            onClick={isRecording ? stopRecording : startRecording}
-            disabled={whisperLoading || isProcessing || !isModelLoaded}
-            color={isRecording ? 'error' : 'primary'}
-            size="large"
-          >
-            {isRecording ? <StopIcon /> : <MicIcon />}
-          </IconButton>
-
+          {/* Transcribed Text */}
           {transcribedText && (
-            <Box sx={{ width: '100%', mt: 2 }}>
-              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                Transcribed Text:
-              </Typography>
-              <Typography variant="body1">
+            <Paper 
+              elevation={0}
+              sx={{ 
+                p: 3,
+                width: '100%',
+                bgcolor: (theme) => theme.palette.mode === 'dark' 
+                  ? 'rgba(0, 0, 0, 0.85)'
+                  : 'rgba(255, 255, 255, 0.9)',
+                backdropFilter: 'blur(10px)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 2,
+                border: '1px solid',
+                borderColor: (theme) => theme.palette.mode === 'dark'
+                  ? 'rgba(255, 255, 255, 0.15)'
+                  : 'rgba(0, 0, 0, 0.1)',
+                boxShadow: (theme) => theme.palette.mode === 'dark'
+                  ? '0 4px 20px rgba(0, 0, 0, 0.6)'
+                  : '0 4px 20px rgba(0, 0, 0, 0.1)'
+              }}
+            >
+              <Typography 
+                variant="body1" 
+                align="center" 
+                sx={{ 
+                  width: '100%',
+                  color: (theme) => theme.palette.mode === 'dark'
+                    ? 'rgba(255, 255, 255, 0.95)'
+                    : 'rgba(0, 0, 0, 0.9)',
+                  fontWeight: 500,
+                  lineHeight: 1.6
+                }}
+              >
                 {transcribedText}
               </Typography>
-            </Box>
+            </Paper>
+          )}
+        </Box>
+
+        {/* Audio Visualizer */}
+        <Box sx={{ 
+          position: 'absolute',
+          top: '60%', 
+          left: 0,
+          right: 0,
+          transform: 'translateY(-50%)',
+          pointerEvents: 'none'
+        }}>
+          <AudioVisualizer 
+            isRecording={isRecording}
+            audioStream={audioStream}
+          />
+        </Box>
+
+        {/* Bottom Controls */}
+        <Box sx={{ 
+          position: 'absolute',
+          bottom: 24,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center'
+        }}>
+          {isRecording && (
+            <IconButton
+              color="primary"
+              size="large"
+              onClick={stopRecording}
+              sx={{
+                width: 64,
+                height: 64,
+                bgcolor: (theme) => theme.palette.mode === 'dark' 
+                  ? 'rgba(0, 0, 0, 0.85)'
+                  : 'background.paper',
+                '&:hover': {
+                  bgcolor: (theme) => theme.palette.mode === 'dark' 
+                    ? 'rgba(0, 0, 0, 0.95)'
+                    : 'background.paper',
+                },
+                border: '1px solid',
+                borderColor: (theme) => theme.palette.mode === 'dark'
+                  ? 'rgba(255, 255, 255, 0.15)'
+                  : 'rgba(0, 0, 0, 0.1)',
+                boxShadow: (theme) => theme.palette.mode === 'dark'
+                  ? '0 4px 20px rgba(0, 0, 0, 0.6)'
+                  : '0 4px 20px rgba(0, 0, 0, 0.1)'
+              }}
+            >
+              <StopIcon />
+            </IconButton>
           )}
         </Box>
       </DialogContent>

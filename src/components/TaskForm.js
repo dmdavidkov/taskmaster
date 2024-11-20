@@ -160,6 +160,14 @@ const TaskForm = ({
     }, 200);
   };
 
+  const handleBackdropClick = (e) => {
+    // Prevent closing if voice dialog is open
+    if (showVoiceDialog) {
+      return;
+    }
+    handleClose();
+  };
+
   // Load saved language preference
   useEffect(() => {
     const savedLanguage = localStorage.getItem('whisperLanguage');
@@ -266,23 +274,28 @@ const TaskForm = ({
   };
 
   const handleVoiceDialogClose = () => {
+    // Only close if we're not in the middle of recording/processing
+    if (!showVoiceDialog) return;
     setShowVoiceDialog(false);
-    setActiveVoiceField(null);
+    // Keep the active field until transcription is complete
   };
 
   const handleTranscriptionComplete = (text, language) => {
-    setShowVoiceDialog(false);
+    if (!activeVoiceField) return;
+    
     setFormData(prev => ({
       ...prev,
       [activeVoiceField]: text,
       language: language,
       ...(activeVoiceField === 'title' ? { speechText: text } : {})
     }));
+    
+    setShowVoiceDialog(false);
     setActiveVoiceField(null);
   };
 
   return (
-    <Backdrop onClick={handleClose}>
+    <Backdrop onClick={handleBackdropClick}>
       <FormContainer>
         <StyledPaper 
           onClick={(e) => e.stopPropagation()}
