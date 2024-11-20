@@ -4,6 +4,21 @@ A beautiful and responsive task management application built with Electron and R
 
 ![TaskMaster Screenshot](assets/Screenshot.png)
 
+## Getting Started
+
+### Environment Setup
+
+1. Clone the repository
+2. Copy `.env.example` to `.env`:
+   ```bash
+   cp .env.example .env
+   ```
+3. Update the `.env` file with your settings:
+   - `REACT_APP_NEBIUS_API_KEY`: Your Nebius API key for AI task processing
+   - Other settings can be left as default for development
+
+> **Note**: The `.env` file contains sensitive information and is not tracked in version control. Make sure to keep your API keys secure.
+
 ## Features
 
 - Create, edit, and delete tasks
