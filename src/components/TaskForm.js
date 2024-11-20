@@ -15,7 +15,12 @@ import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
 import CircularProgress from '@mui/material/CircularProgress';
 import Alert from '@mui/material/Alert';
+import RecordVoiceOverIcon from '@mui/icons-material/RecordVoiceOver';
+import Tooltip from '@mui/material/Tooltip';
 import useWhisperStore from '../stores/whisperStore';
+import ChatBubbleIcon from '@mui/icons-material/ChatBubble';
+import TranslateIcon from '@mui/icons-material/Translate';
+import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
 
 const Backdrop = styled('div')({
   position: 'fixed',
@@ -72,9 +77,10 @@ const FormContent = styled(Box)(({ theme }) => ({
 }));
 
 const priorities = [
-  { value: 'low', label: 'Low Priority', color: 'success.main' },
-  { value: 'medium', label: 'Medium Priority', color: 'warning.main' },
+  { value: 'critical', label: 'Critical Priority', color: 'error.dark' },
   { value: 'high', label: 'High Priority', color: 'error.main' },
+  { value: 'medium', label: 'Medium Priority', color: 'warning.main' },
+  { value: 'low', label: 'Low Priority', color: 'success.main' },
 ];
 
 const VoiceInputDialog = styled(Dialog)(({ theme }) => ({
@@ -109,6 +115,29 @@ const RecordingIndicator = styled(Box)(({ theme }) => ({
   },
 }));
 
+const SpeechTooltip = styled(({ className, ...props }) => (
+  <Tooltip {...props} classes={{ popper: className }} />
+))(({ theme }) => ({
+  '& .MuiTooltip-tooltip': {
+    maxWidth: 400,
+    fontSize: '0.875rem',
+    backgroundColor: theme.palette.background.paper,
+    color: theme.palette.text.primary,
+    border: `1px solid ${theme.palette.divider}`,
+    boxShadow: theme.shadows[2],
+    padding: theme.spacing(1.5),
+    '& .language-tag': {
+      display: 'inline-block',
+      padding: '2px 6px',
+      backgroundColor: theme.palette.primary.main,
+      color: theme.palette.primary.contrastText,
+      borderRadius: theme.shape.borderRadius,
+      fontSize: '0.75rem',
+      marginBottom: theme.spacing(1)
+    }
+  }
+}));
+
 const TaskForm = ({ 
   task = null, 
   onSubmit, 
@@ -124,11 +153,15 @@ const TaskForm = ({
     error: whisperError
   } = useWhisperStore();
 
+  // Get user's timezone
+  const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
   const getTomorrowDate = () => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     tomorrow.setHours(23, 59, 59, 999); // Set to end of tomorrow
-    return tomorrow;
+    // Convert to UTC for storage
+    return zonedTimeToUtc(tomorrow, userTimezone);
   };
 
   const [formData, setFormData] = useState({
@@ -137,6 +170,8 @@ const TaskForm = ({
     priority: 'medium',
     dueDate: getTomorrowDate(),
     createdDate: null,
+    speechText: '',
+    language: 'en'
   });
 
   const [errors, setErrors] = useState({});
@@ -149,6 +184,7 @@ const TaskForm = ({
   const [showSetupPrompt, setShowSetupPrompt] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [transcriptionError, setTranscriptionError] = useState(null);
+  const [showOriginalText, setShowOriginalText] = useState(false);
 
   const [windowSize, setWindowSize] = useState({
     width: window.innerWidth,
@@ -177,6 +213,8 @@ const TaskForm = ({
         priority: 'medium',
         dueDate: getTomorrowDate(),
         createdDate: null,
+        speechText: '',
+        language: 'en'
       });
       setErrors({});
     }, 200);
@@ -195,18 +233,20 @@ const TaskForm = ({
       setFormData({
         title: task.title || '',
         description: task.description || '',
-        priority: task.priority || 'medium',
-        dueDate: task.dueDate ? new Date(task.dueDate) : getTomorrowDate(),
-        createdDate: task.createdDate ? new Date(task.createdDate) : task.createdDate,
+        priority: typeof task.priority === 'object' ? task.priority.level : (task.priority || 'medium'),
+        dueDate: task.dueDate ? utcToZonedTime(new Date(task.dueDate), userTimezone) : getTomorrowDate(),
+        createdDate: task.createdDate ? utcToZonedTime(new Date(task.createdDate), userTimezone) : null,
+        speechText: task.metadata?.speechText || '',
+        language: task.metadata?.language || 'en'
       });
     } else {
       setFormData(prev => ({
         ...prev,
         dueDate: getTomorrowDate(),
-        createdDate: new Date()
+        createdDate: zonedTimeToUtc(new Date(), userTimezone)
       }));
     }
-  }, [task]);
+  }, [task, userTimezone]);
 
   const handleChange = (field) => (event) => {
     setFormData(prev => ({
@@ -240,22 +280,36 @@ const TaskForm = ({
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!validate()) return;
-
-    const taskData = {
-      ...formData,
-      dueDate: formData.dueDate ? formData.dueDate.toISOString() : null,
-    };
-
-    if (task) {
-      taskData.id = task.id;
-      taskData.completed = task.completed;
-      taskData.completedAt = task.completedAt;
+    
+    // Validate required fields
+    const newErrors = {};
+    if (!formData.title.trim()) {
+      newErrors.title = 'Title is required';
+    }
+    if (!formData.dueDate) {
+      newErrors.dueDate = 'Due date is required';
+    }
+    
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
     }
 
-    onSubmit(taskData);
+    // Convert dates to UTC before submitting
+    const submissionData = {
+      ...formData,
+      dueDate: zonedTimeToUtc(formData.dueDate, userTimezone),
+      createdDate: formData.createdDate ? zonedTimeToUtc(formData.createdDate, userTimezone) : null,
+      metadata: {
+        speechText: formData.speechText,
+        language: formData.language
+      }
+    };
+
+    onSubmit(submissionData);
+    handleClose();
   };
 
   const startRecording = async (field) => {
@@ -352,108 +406,110 @@ const TaskForm = ({
           onClick={(e) => e.stopPropagation()}
           sx={{ visibility: isRecording || isProcessing ? 'hidden' : 'visible' }}
         >
-          <IconButton className="close-button" onClick={handleClose}>
-            <CloseIcon />
-          </IconButton>
-          <FormContent component="form" onSubmit={handleSubmit}>
-            <Typography variant="h5">
-              {task ? 'Edit Task' : 'New Task'}
-            </Typography>
-
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-              <TextField
-                fullWidth
-                label="Title"
-                name="title"
-                value={formData.title}
-                onChange={handleChange('title')}
-                error={!!errors.title}
-                helperText={errors.title}
-                InputLabelProps={{
-                  shrink: true,
-                }}
-                InputProps={{
-                  endAdornment: (
-                    <IconButton
-                      onClick={() => startRecording('title')}
-                      disabled={!isModelLoaded || isRecording || isProcessing}
-                      sx={{
-                        color: isModelLoaded ? 'primary.main' : 'action.disabled',
-                        '&.Mui-disabled': {
-                          color: 'action.disabled',
-                          pointerEvents: 'none'
-                        }
-                      }}
-                    >
-                      <MicIcon />
-                    </IconButton>
-                  ),
-                }}
-              />
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="h6">
+                {task ? 'Edit Task' : 'New Task'}
+              </Typography>
+              {formData.speechText && (
+                <SpeechTooltip
+                  title={
+                    <Box>
+                      <span className="language-tag">{formData.language.toUpperCase()}</span>
+                      <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                        {formData.speechText}
+                      </Typography>
+                    </Box>
+                  }
+                  placement="right"
+                >
+                  <IconButton 
+                    size="small" 
+                    sx={{ 
+                      color: 'text.secondary',
+                      p: 0.5,
+                      '&:hover': {
+                        color: 'primary.main'
+                      }
+                    }}
+                  >
+                    <RecordVoiceOverIcon fontSize="small" />
+                  </IconButton>
+                </SpeechTooltip>
+              )}
             </Box>
+            <IconButton onClick={handleClose}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
+          
+          <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1 }}>
+            <TextField
+              fullWidth
+              label="Title"
+              name="title"
+              value={formData.title}
+              onChange={handleChange('title')}
+              error={Boolean(errors.title)}
+              helperText={errors.title}
+              margin="normal"
+              required
+              InputProps={{
+                endAdornment: (
+                  <IconButton
+                    color="primary"
+                    onClick={() => startRecording('title')}
+                    disabled={isRecording || !hasCompletedSetup || whisperLoading}
+                  >
+                    {isRecording && recordingFor === 'title' ? <StopIcon /> : <MicIcon />}
+                  </IconButton>
+                ),
+              }}
+            />
 
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
-              <TextField
-                fullWidth
-                multiline
-                rows={4}
-                label="Description"
-                name="description"
-                value={formData.description}
-                onChange={handleChange('description')}
-                error={!!errors.description}
-                helperText={errors.description}
-                InputLabelProps={{
-                  shrink: true,
-                }}
-                InputProps={{
-                  endAdornment: (
-                    <IconButton
-                      onClick={() => startRecording('description')}
-                      disabled={!isModelLoaded || isRecording || isProcessing}
-                      sx={{
-                        color: isModelLoaded ? 'primary.main' : 'action.disabled',
-                        '&.Mui-disabled': {
-                          color: 'action.disabled',
-                          pointerEvents: 'none'
-                        }
-                      }}
-                    >
-                      <MicIcon />
-                    </IconButton>
-                  ),
-                }}
-              />
-            </Box>
+            <TextField
+              fullWidth
+              label="Description"
+              name="description"
+              value={formData.description}
+              onChange={handleChange('description')}
+              error={Boolean(errors.description)}
+              helperText={errors.description}
+              margin="normal"
+              multiline
+              rows={4}
+              InputProps={{
+                endAdornment: (
+                  <IconButton
+                    color="primary"
+                    onClick={() => startRecording('description')}
+                    disabled={isRecording || !hasCompletedSetup || whisperLoading}
+                  >
+                    {isRecording && recordingFor === 'description' ? <StopIcon /> : <MicIcon />}
+                  </IconButton>
+                ),
+              }}
+            />
 
             <TextField
               select
+              fullWidth
               label="Priority"
+              name="priority"
               value={formData.priority}
               onChange={handleChange('priority')}
-              fullWidth
-              InputLabelProps={{
-                shrink: true,
-              }}
+              margin="normal"
             >
-              {priorities.map((option) => (
-                <MenuItem 
-                  key={option.value} 
-                  value={option.value}
-                  sx={{ color: option.color }}
-                >
-                  {option.label}
-                </MenuItem>
-              ))}
+              <MenuItem value="low">Low</MenuItem>
+              <MenuItem value="medium">Medium</MenuItem>
+              <MenuItem value="high">High</MenuItem>
             </TextField>
 
             <DateTimePicker
               label="Due Date"
               value={formData.dueDate}
-              onChange={handleDateChange}
-              slotProps={{ textField: { fullWidth: true } }}
-              minDate={new Date()}
-              format="Pp"
+              onChange={(newValue) => handleDateChange(newValue)}
+              renderInput={(params) => <TextField {...params} fullWidth margin="normal" />}
             />
 
             {task && task.createdDate && (
@@ -471,7 +527,7 @@ const TaskForm = ({
               />
             )}
 
-            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 2 }}>
+            <Box sx={{ mt: 3, display: 'flex', justifyContent: 'space-between' }}>
               {task && (
                 <Button
                   variant="outlined"
@@ -481,15 +537,23 @@ const TaskForm = ({
                   Delete
                 </Button>
               )}
-              <Button
-                variant="contained"
-                type="submit"
-                color="primary"
-              >
-                {task ? 'Save Changes' : 'Create Task'}
-              </Button>
+              <Box sx={{ ml: 'auto', display: 'flex', gap: 2 }}>
+                <Button
+                  variant="outlined"
+                  onClick={handleClose}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="contained"
+                  color="primary"
+                >
+                  {task ? 'Update' : 'Create'} Task
+                </Button>
+              </Box>
             </Box>
-          </FormContent>
+          </Box>
         </StyledPaper>
       </FormContainer>
 

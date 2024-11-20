@@ -5,6 +5,18 @@ const log = require('electron-log');
 const Store = require('electron-store');
 const store = new Store();
 
+// Handle creating/removing shortcuts on Windows when installing/uninstalling
+if (require('electron-squirrel-startup')) {
+  app.quit();
+  process.exit(0);
+}
+
+// Load environment variables first
+require('dotenv').config();
+
+// Initialize AI Service
+require('./services/aiService');
+
 let mainWindow;
 let updateCheckInProgress = false;
 

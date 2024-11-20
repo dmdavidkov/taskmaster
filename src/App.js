@@ -207,9 +207,15 @@ function App() {
     setSelectedTask(null);
   };
 
-  const handleAddTask = () => {
-    setSelectedTask(null);
-    setDrawerOpen(true);
+  const handleAddTask = (taskData) => {
+    if (taskData) {
+      // If taskData is provided (from speech), create task directly
+      handleTaskAction(createTask, taskData);
+    } else {
+      // Otherwise, open the form
+      setSelectedTask(null);
+      setDrawerOpen(true);
+    }
   };
 
   return (

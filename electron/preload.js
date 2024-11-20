@@ -8,6 +8,12 @@ const createSubscription = (channel, callback) => {
 };
 
 contextBridge.exposeInMainWorld('electron', {
+  env: {
+    REACT_APP_NEBIUS_API_KEY: process.env.REACT_APP_NEBIUS_API_KEY,
+  },
+  ai: {
+    processTaskText: (text, language) => ipcRenderer.invoke('extract-task', text, language),
+  },
   store: {
     get: (key) => ipcRenderer.invoke('get-store-value', key),
     set: (key, value) => ipcRenderer.invoke('set-store-value', key, value),

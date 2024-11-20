@@ -9,6 +9,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format, isToday, isFuture, parseISO, startOfDay, endOfDay, isWithinInterval, addDays } from 'date-fns';
+import { formatInTimeZone, utcToZonedTime } from 'date-fns-tz';
 import CircularProgress from '@mui/material/CircularProgress';
 import { styled } from '@mui/material/styles';
 import Chip from '@mui/material/Chip';
@@ -45,8 +46,16 @@ const TaskList = ({
   onTaskToggle,
   onTaskDelete 
 }) => {
+  // Get user's timezone
+  const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
   const getPriorityColor = (priority) => {
-    switch (priority?.toLowerCase()) {
+    // Handle both string and object priority formats
+    const priorityLevel = typeof priority === 'object' ? priority.level : priority;
+    
+    switch (priorityLevel?.toLowerCase()) {
+      case 'critical':
+        return 'error';
       case 'high':
         return 'error';
       case 'medium':
@@ -55,6 +64,43 @@ const TaskList = ({
         return 'success';
       default:
         return 'default';
+    }
+  };
+
+  const formatDate = (date) => {
+    if (!date) return '';
+    try {
+      // Convert UTC to local time zone for display
+      return formatInTimeZone(new Date(date), userTimezone, 'MMM d, yyyy h:mm a');
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return format(new Date(date), 'MMM d, yyyy');
+    }
+  };
+
+  const isTaskToday = (date) => {
+    if (!date) return false;
+    try {
+      // Convert UTC to local time for comparison
+      const localDate = utcToZonedTime(new Date(date), userTimezone);
+      const today = new Date();
+      return startOfDay(localDate) <= today && endOfDay(localDate) >= today;
+    } catch (error) {
+      console.error('Error checking if task is today:', error);
+      return false;
+    }
+  };
+
+  const isTaskUpcoming = (date) => {
+    if (!date) return false;
+    try {
+      // Convert UTC to local time for comparison
+      const localDate = utcToZonedTime(new Date(date), userTimezone);
+      const today = new Date();
+      return localDate > today;
+    } catch (error) {
+      console.error('Error checking if task is upcoming:', error);
+      return false;
     }
   };
 
@@ -74,9 +120,9 @@ const TaskList = ({
         case 'completed':
           return task.completed && matchesSearch;
         case 'today':
-          return task.dueDate && isToday(parseISO(task.dueDate)) && !task.completed && matchesSearch;
+          return task.dueDate && isTaskToday(task.dueDate) && !task.completed && matchesSearch;
         case 'upcoming':
-          return task.dueDate && isFuture(parseISO(task.dueDate)) && !task.completed && matchesSearch;
+          return task.dueDate && isTaskUpcoming(task.dueDate) && !task.completed && matchesSearch;
         case 'priority':
           return task.priority === 'high' && !task.completed && matchesSearch;
         default:
@@ -202,21 +248,21 @@ const TaskList = ({
                 <Box sx={{ mt: 1, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                   {task.priority && (
                     <Chip
-                      label={task.priority}
+                      label={typeof task.priority === 'object' ? task.priority.level : task.priority}
                       size="small"
                       color={getPriorityColor(task.priority)}
                     />
                   )}
                   {task.dueDate && (
                     <Chip
-                      label={format(new Date(task.dueDate), 'MMM d, yyyy')}
+                      label={formatDate(task.dueDate)}
                       size="small"
                       variant="outlined"
                     />
                   )}
-                  {task.completed && (
+                  {task.completed && task.completedAt && (
                     <Chip
-                      label={`Completed ${format(new Date(task.completedAt), 'MMM d, yyyy')}`}
+                      label={`Completed ${formatDate(task.completedAt)}`}
                       size="small"
                       color="primary"
                     />
