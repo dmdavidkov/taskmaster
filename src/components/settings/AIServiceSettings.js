@@ -60,31 +60,25 @@ const AIServiceSettings = () => {
   };
 
   return (
-    <Box sx={{ maxWidth: 600, mx: 'auto', mt: 2 }}>
-      <Typography variant="h6" gutterBottom>
-        AI Service Configuration
-      </Typography>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <Typography variant="h6">AI Service Configuration</Typography>
 
-      <FormControl fullWidth sx={{ mb: 2 }}>
+      <FormControl fullWidth>
         <TextField
           label="Base URL"
           value={localConfig.baseURL}
           onChange={handleInputChange('baseURL')}
-          margin="normal"
-          fullWidth
           error={!!error && !localConfig.baseURL}
           helperText={!localConfig.baseURL && "Base URL is required"}
         />
         <FormHelperText>The base URL for the AI service API</FormHelperText>
       </FormControl>
 
-      <FormControl fullWidth sx={{ mb: 2 }}>
+      <FormControl fullWidth>
         <TextField
           label="API Key"
           value={localConfig.apiKey}
           onChange={handleInputChange('apiKey')}
-          margin="normal"
-          fullWidth
           type="password"
           error={!!error && !localConfig.apiKey}
           helperText={!localConfig.apiKey && "API key is required"}
@@ -92,13 +86,11 @@ const AIServiceSettings = () => {
         <FormHelperText>Your API key for authentication</FormHelperText>
       </FormControl>
 
-      <FormControl fullWidth sx={{ mb: 3 }}>
+      <FormControl fullWidth>
         <TextField
           label="Model Name"
           value={localConfig.modelName}
           onChange={handleInputChange('modelName')}
-          margin="normal"
-          fullWidth
           error={!!error && !localConfig.modelName}
           helperText={!localConfig.modelName && "Model name is required"}
         />
@@ -106,18 +98,18 @@ const AIServiceSettings = () => {
       </FormControl>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
+        <Alert severity="error">
           {error}
         </Alert>
       )}
 
       {testResult && (
-        <Alert severity="success" sx={{ mb: 2 }}>
+        <Alert severity="success">
           {testResult}
         </Alert>
       )}
 
-      <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
+      <Box sx={{ display: 'flex', gap: 2 }}>
         <LoadingButton
           variant="contained"
           onClick={handleSave}

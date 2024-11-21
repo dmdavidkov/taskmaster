@@ -11,19 +11,18 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { format, isToday, isFuture, parseISO, startOfDay, endOfDay, isWithinInterval, addDays } from 'date-fns';
 import { formatInTimeZone, utcToZonedTime } from 'date-fns-tz';
 import CircularProgress from '@mui/material/CircularProgress';
-import { styled } from '@mui/material/styles';
+import { styled, alpha } from '@mui/material/styles';
 import Chip from '@mui/material/Chip';
 import RecordVoiceOverIcon from '@mui/icons-material/RecordVoiceOver';
 import TranslateIcon from '@mui/icons-material/Translate';
 import Tooltip from '@mui/material/Tooltip';
 
 const StyledPaper = styled(Paper)(({ theme }) => ({
-  padding: theme.spacing(2),
-  marginBottom: theme.spacing(2),
   display: 'flex',
   alignItems: 'flex-start',
-  gap: theme.spacing(2),
   transition: 'all 0.2s ease-in-out',
+  position: 'relative',
+  overflow: 'hidden',
   '&:hover': {
     transform: 'translateX(5px)',
     boxShadow: theme.shadows[4],
@@ -31,12 +30,19 @@ const StyledPaper = styled(Paper)(({ theme }) => ({
   '& .content': {
     flexGrow: 1,
     minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
   },
   '& .actions': {
     display: 'flex',
     flexShrink: 0,
-    gap: theme.spacing(1),
   },
+  '& .metadata': {
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: theme.spacing(1),
+  }
 }));
 
 const TaskList = ({ 
@@ -45,6 +51,7 @@ const TaskList = ({
   selectedTab = 'all',
   searchQuery = '',
   sortBy = 'dueDate',
+  compact = false,
   onTaskClick,
   onTaskToggle,
   onTaskDelete 
@@ -102,6 +109,17 @@ const TaskList = ({
       return localDate > today && isFuture(localDate);
     } catch (error) {
       console.error('Error checking if task is upcoming:', error);
+      return false;
+    }
+  };
+
+  const isTaskExpired = (date) => {
+    if (!date) return false;
+    try {
+      const localDate = utcToZonedTime(new Date(date), userTimezone);
+      return localDate < new Date() && !isToday(localDate);
+    } catch (error) {
+      console.error('Error checking if task is expired:', error);
       return false;
     }
   };
@@ -206,7 +224,7 @@ const TaskList = ({
         sx={{
           display: 'flex',
           flexDirection: 'column',
-          gap: 2,
+          gap: compact ? 0.5 : 2,
           p: 2,
         }}
       >
@@ -219,128 +237,213 @@ const TaskList = ({
             exit={{ opacity: 0, x: 20 }}
             transition={{ duration: 0.2 }}
           >
-            <StyledPaper>
+            <StyledPaper 
+              sx={(theme) => ({
+                cursor: 'pointer',
+                padding: compact ? theme.spacing(1.5) : theme.spacing(2),
+                marginBottom: 0,
+                display: 'flex',
+                alignItems: 'center',
+                gap: theme.spacing(2),
+                position: 'relative',
+                transition: 'all 0.2s ease-in-out',
+                backgroundColor: theme.palette.background.paper,
+                borderLeft: (theme) => {
+                  const priorityLevel = typeof task.priority === 'object' ? task.priority.level : task.priority;
+                  let color;
+                  switch (priorityLevel?.toLowerCase()) {
+                    case 'critical':
+                      color = theme.palette.error.main;
+                      break;
+                    case 'high':
+                      color = '#ff6b6b';  // Vibrant coral red
+                      break;
+                    case 'medium':
+                      color = '#ffd43b';  // Bright yellow
+                      break;
+                    case 'low':
+                      color = '#69db7c';  // Fresh green
+                      break;
+                    default:
+                      color = 'transparent';
+                  }
+                  return `4px solid ${alpha(color, 0.8)}`;
+                },
+                borderBottom: compact ? `1px solid ${alpha(theme.palette.divider, 0.5)}` : 'none',
+                '&:last-child': {
+                  marginBottom: 0,
+                  borderBottom: 'none',
+                },
+                '&:hover': {
+                  transform: 'translateX(5px)',
+                  boxShadow: theme.shadows[4],
+                  zIndex: 1,
+                  '& .complete-button': {
+                    opacity: 1,
+                    transform: 'scale(1)',
+                  }
+                },
+                '& .complete-button': {
+                  padding: 0,
+                  opacity: task.completed ? 1 : 0.7,
+                  transform: task.completed ? 'scale(1)' : 'scale(0.9)',
+                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                  '& svg': {
+                    fontSize: compact ? '1.25rem' : '1.5rem',
+                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                  },
+                  '&:hover': {
+                    opacity: 1,
+                    transform: 'scale(1.1)',
+                    backgroundColor: 'transparent',
+                  }
+                },
+                '& .content': {
+                  flexGrow: 1,
+                  minWidth: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: compact ? theme.spacing(0.5) : theme.spacing(1),
+                },
+                '& .MuiTypography-root.title': {
+                  fontSize: compact ? '0.95rem' : '1.125rem',
+                  fontWeight: compact ? 500 : 600,
+                  lineHeight: compact ? 1.3 : 1.4,
+                  color: task.completed ? theme.palette.text.secondary : theme.palette.text.primary,
+                  textDecoration: task.completed ? 'line-through' : 'none',
+                  transition: 'all 0.2s ease-in-out',
+                },
+                '& .MuiTypography-root.description': {
+                  fontSize: '0.875rem',
+                  color: theme.palette.text.secondary,
+                  lineHeight: 1.4,
+                },
+                '& .metadata': {
+                  marginTop: compact ? theme.spacing(0.5) : theme.spacing(1),
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  gap: theme.spacing(1),
+                },
+                '& .MuiChip-root': {
+                  height: compact ? 16 : 20,
+                  '& .MuiChip-label': {
+                    fontSize: compact ? '0.65rem' : '0.75rem',
+                    padding: compact ? '0 3px' : '0 4px',
+                    lineHeight: 1.2,
+                  },
+                  '& .MuiChip-icon': {
+                    fontSize: compact ? '0.7rem' : '0.75rem',
+                    width: compact ? 12 : 14,
+                    height: compact ? 12 : 14,
+                    marginLeft: compact ? '2px' : '3px',
+                    marginRight: compact ? '-3px' : '-2px',
+                  }
+                },
+                '& .actions': {
+                  position: 'absolute',
+                  right: theme.spacing(1),
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  opacity: 0,
+                  transition: 'opacity 0.2s ease-in-out',
+                  backgroundColor: theme.palette.background.paper,
+                  boxShadow: theme.shadows[1],
+                  borderRadius: theme.shape.borderRadius,
+                  padding: theme.spacing(0.5),
+                  gap: theme.spacing(0.5),
+                  zIndex: 1,
+                },
+                '&:hover .actions': {
+                  opacity: 1,
+                },
+              })}
+            >
               <IconButton
-                size="small"
-                onClick={() => onTaskToggle(task.id)}
-                color={task.completed ? 'primary' : 'default'}
+                className="complete-button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onTaskToggle(task.id);
+                }}
+                color={task.completed ? 'success' : 'default'}
               >
-                {task.completed ? <CheckCircleIcon /> : <RadioButtonUncheckedIcon />}
+                {task.completed ? (
+                  <CheckCircleIcon sx={{ 
+                    color: theme => theme.palette.success.main,
+                  }} />
+                ) : (
+                  <RadioButtonUncheckedIcon sx={{
+                    color: theme => theme.palette.action.active,
+                  }} />
+                )}
               </IconButton>
 
-              <div className="content" onClick={() => onTaskClick(task)}>
-                <Typography
-                  variant="h6"
-                  component="h3"
-                  sx={{
-                    textDecoration: task.completed ? 'line-through' : 'none',
-                    color: task.completed ? 'text.secondary' : 'text.primary',
-                  }}
-                >
-                  {task?.title || 'Untitled Task'}
+              <Box 
+                className="content"
+                onClick={() => onTaskClick?.(task)}
+              >
+                <Typography className="title">
+                  {task.title}
                 </Typography>
-
-                {task?.description && (
-                  <Typography
-                    variant="body2"
-                    color="text.secondary"
-                    sx={{
-                      textDecoration: task.completed ? 'line-through' : 'none',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      display: '-webkit-box',
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical',
-                    }}
-                  >
+                
+                {!compact && task.description && (
+                  <Typography className="description">
                     {task.description}
                   </Typography>
                 )}
-
-                <Box sx={{ mt: 1, display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
-                  {task.priority && (
-                    <Chip
-                      label={typeof task.priority === 'object' ? task.priority.level : task.priority}
-                      size="small"
-                      color={getPriorityColor(task.priority)}
-                      sx={{ textTransform: 'capitalize' }}
-                    />
-                  )}
+                
+                <Box className="metadata">
                   {task.dueDate && (
                     <Chip
                       label={formatDate(task.dueDate)}
                       size="small"
-                      color={isTaskToday(task.dueDate) ? 'warning' : 'default'}
+                      color={isTaskExpired(task.dueDate) ? 'error' : isTaskToday(task.dueDate) ? 'warning' : 'default'}
+                      variant={isTaskExpired(task.dueDate) || isTaskToday(task.dueDate) ? 'filled' : 'outlined'}
+                    />
+                  )}
+                  {task.completed && task.completedAt && (
+                    <Chip
+                      label={`Completed: ${formatDate(task.completedAt)}`}
+                      size="small"
+                      color="success"
+                      variant="filled"
                     />
                   )}
                   {task.metadata?.speechText && (
-                    <Tooltip
-                      title={
-                        <Box>
-                          <Box sx={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            gap: 1, 
-                            mb: 1 
-                          }}>
-                            <TranslateIcon fontSize="small" />
-                            <Typography variant="caption" sx={{ 
-                              backgroundColor: 'primary.main',
-                              color: 'primary.contrastText',
-                              px: 1,
-                              py: 0.5,
-                              borderRadius: 1,
-                              fontWeight: 'bold'
-                            }}>
-                              {task.metadata.language.toUpperCase()}
-                            </Typography>
-                          </Box>
-                          <Typography variant="body2" sx={{ 
-                            whiteSpace: 'pre-wrap',
-                            fontStyle: 'italic',
-                            color: 'text.secondary'
-                          }}>
-                            "{task.metadata.speechText}"
-                          </Typography>
-                        </Box>
-                      }
-                      placement="top"
-                      arrow
-                    >
-                      <IconButton 
-                        size="small" 
-                        sx={{ 
-                          p: 0.5,
-                          color: 'primary.main',
-                          '&:hover': {
-                            backgroundColor: 'primary.main',
-                            color: 'primary.contrastText'
-                          }
-                        }}
-                      >
-                        <RecordVoiceOverIcon fontSize="small" />
-                      </IconButton>
+                    <Tooltip title={task.metadata.speechText}>
+                      <Chip
+                        icon={<RecordVoiceOverIcon />}
+                        label={task.metadata.language.toUpperCase()}
+                        size="small"
+                        variant="outlined"
+                        color="primary"
+                      />
                     </Tooltip>
                   )}
                 </Box>
-              </div>
+              </Box>
 
-              <div className="actions">
+              <Box className="actions">
                 <IconButton
                   size="small"
-                  onClick={() => onTaskClick(task)}
-                  color="primary"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTaskClick(task);
+                  }}
                 >
                   <EditIcon />
                 </IconButton>
                 <IconButton
                   size="small"
-                  onClick={() => onTaskDelete(task.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTaskDelete(task.id);
+                  }}
                   color="error"
                 >
                   <DeleteIcon />
                 </IconButton>
-              </div>
+              </Box>
             </StyledPaper>
           </motion.div>
         ))}

@@ -370,19 +370,22 @@ const TaskForm = ({
                 helperText={errors.title}
                 fullWidth
                 required
+                InputProps={{
+                  endAdornment: (
+                    <Tooltip title={isWhisperReady ? "Record voice" : "Loading speech recognition..."}>
+                      <IconButton
+                        onClick={() => handleVoiceClick('title')}
+                        color="primary"
+                        size="small"
+                        disabled={!isWhisperReady}
+                        edge="end"
+                      >
+                        <MicIcon />
+                      </IconButton>
+                    </Tooltip>
+                  ),
+                }}
               />
-              <Tooltip title={isWhisperReady ? "Record voice" : "Loading speech recognition..."}>
-                <span>
-                  <IconButton
-                    onClick={() => handleVoiceClick('title')}
-                    color="primary"
-                    size="small"
-                    disabled={!isWhisperReady}
-                  >
-                    <MicIcon />
-                  </IconButton>
-                </span>
-              </Tooltip>
             </Box>
 
             <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', mb: 2 }}>
@@ -396,20 +399,34 @@ const TaskForm = ({
                 helperText={errors.description}
                 multiline
                 rows={4}
+                InputProps={{
+                  endAdornment: (
+                    <Box sx={{ 
+                      position: 'absolute', 
+                      right: '8px',
+                      height: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      pointerEvents: 'none',
+                      '& .MuiButtonBase-root': {
+                        pointerEvents: 'auto'
+                      }
+                    }}>
+                      <Tooltip title={isWhisperReady ? "Record voice" : "Loading speech recognition..."}>
+                        <IconButton
+                          onClick={() => handleVoiceClick('description')}
+                          color="primary"
+                          size="small"
+                          disabled={!isWhisperReady}
+                          edge="end"
+                        >
+                          <MicIcon />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                  ),
+                }}
               />
-              <Tooltip title={isWhisperReady ? "Record voice" : "Loading speech recognition..."}>
-                <span>
-                  <IconButton
-                    onClick={() => handleVoiceClick('description')}
-                    color="primary"
-                    size="small"
-                    disabled={!isWhisperReady}
-                    sx={{ mt: 1 }}
-                  >
-                    <MicIcon />
-                  </IconButton>
-                </span>
-              </Tooltip>
             </Box>
 
             <TextField

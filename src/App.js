@@ -20,8 +20,12 @@ import MenuItem from '@mui/material/MenuItem';
 import SortIcon from '@mui/icons-material/Sort';
 import Button from '@mui/material/Button';
 import AddIcon from '@mui/icons-material/Add';
+import ViewCompactIcon from '@mui/icons-material/ViewCompact';
+import ViewAgendaIcon from '@mui/icons-material/ViewAgenda';
 import { bg } from 'date-fns/locale';
 import { initializeApp } from './init';
+import Tooltip from '@mui/material/Tooltip';
+import IconButton from '@mui/material/IconButton';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -92,6 +96,10 @@ function App() {
     const stored = localStorage.getItem('sortBy');
     return stored ? JSON.parse(stored) : '';
   });
+  const [compactView, setCompactView] = useState(() => {
+    const stored = localStorage.getItem('compactView');
+    return stored ? JSON.parse(stored) : false;
+  });
   const { tasks, loading, createTask, updateTask, deleteTask, toggleTaskCompletion } = useTaskStore();
 
   useEffect(() => {
@@ -119,6 +127,10 @@ function App() {
   useEffect(() => {
     localStorage.setItem('sortBy', JSON.stringify(sortBy));
   }, [sortBy]);
+
+  useEffect(() => {
+    localStorage.setItem('compactView', JSON.stringify(compactView));
+  }, [compactView]);
 
   const theme = createTheme({
     palette: {
@@ -282,7 +294,7 @@ function App() {
                     mb: 2 
                   }}
                 >
-                  <FormControl size="small">
+                  <FormControl size="small" sx={{ minWidth: 120 }}>
                     <Select
                       value={sortBy}
                       onChange={(e) => setSortBy(e.target.value)}
@@ -293,12 +305,21 @@ function App() {
                         </InputAdornment>
                       }
                     >
-                      <MenuItem value="">Created On (Newest First)</MenuItem>
-                      <MenuItem value="priority">Priority (High → Low)</MenuItem>
-                      <MenuItem value="dueDate">Due Date (Earliest First)</MenuItem>
-                      <MenuItem value="name">Name (A to Z)</MenuItem>
+                      <MenuItem value="">Created On</MenuItem>
+                      <MenuItem value="dueDate">Due Date</MenuItem>
+                      <MenuItem value="priority">Priority</MenuItem>
+                      <MenuItem value="name">A - Z</MenuItem>
                     </Select>
                   </FormControl>
+                  <Tooltip title={compactView ? "Switch to normal view" : "Switch to compact view"}>
+                    <IconButton
+                      onClick={() => setCompactView(!compactView)}
+                      color={compactView ? "primary" : "default"}
+                      size="small"
+                    >
+                      {compactView ? <ViewAgendaIcon /> : <ViewCompactIcon />}
+                    </IconButton>
+                  </Tooltip>
                 </Box>
 
                 <TaskList
@@ -307,6 +328,7 @@ function App() {
                   selectedTab={selectedTab}
                   searchQuery={searchQuery}
                   sortBy={sortBy}
+                  compact={compactView}
                   onTaskClick={handleTaskClick}
                   onTaskToggle={toggleTaskCompletion}
                   onTaskDelete={handleDeleteTask}
