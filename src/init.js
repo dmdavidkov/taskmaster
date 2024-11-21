@@ -8,9 +8,8 @@ export const initializeApp = async () => {
     whisperStore.initializeWorker();
   }
   
-  // Then check if we should auto-load the model
-  const shouldAutoLoad = localStorage.getItem('autoLoadWhisperModel') === 'true';
-  if (shouldAutoLoad && !whisperStore.isModelLoaded && !whisperStore.isLoading) {
+  // Use the store's state for auto-load check
+  if (whisperStore.autoLoadModel && !whisperStore.isModelLoaded && !whisperStore.isLoading) {
     // Load the model
     await whisperStore.loadModel();
   }

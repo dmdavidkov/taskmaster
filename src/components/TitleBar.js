@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
@@ -8,10 +8,34 @@ import CloseIcon from '@mui/icons-material/Close';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import { alpha } from '@mui/material/styles';
+import { useMediaQuery } from '@mui/material';
 
 const TitleBar = ({ darkMode, onThemeToggle }) => {
+  const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
+
   const handleWindowControl = (command) => {
     window.electron.window[command]();
+  };
+
+  const handleThemeToggle = () => {
+    // Get current settings first
+    window.electron.settings.get().then(settings => {
+      // Determine the new theme value
+      let newTheme;
+      if (settings.theme === 'system') {
+        // If currently using system theme, switch to explicit light/dark
+        newTheme = darkMode ? 'light' : 'dark';
+      } else {
+        // If using explicit theme, toggle between light/dark
+        newTheme = settings.theme === 'dark' ? 'light' : 'dark';
+      }
+
+      // Update settings store
+      window.electron.settings.setTheme(newTheme).then(() => {
+        // Call the original theme toggle handler
+        onThemeToggle();
+      });
+    });
   };
 
   return (
@@ -51,7 +75,7 @@ const TitleBar = ({ darkMode, onThemeToggle }) => {
       }}>
         <IconButton
           size="small"
-          onClick={onThemeToggle}
+          onClick={handleThemeToggle}
           sx={{ 
             fontSize: '1rem',
             '&:hover': {

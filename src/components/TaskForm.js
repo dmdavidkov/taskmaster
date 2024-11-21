@@ -22,66 +22,194 @@ import ChatBubbleIcon from '@mui/icons-material/ChatBubble';
 import TranslateIcon from '@mui/icons-material/Translate';
 import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
 import VoiceRecordDialog from './VoiceRecordDialog';
+import DeleteIcon from '@mui/icons-material/Delete';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import InputAdornment from '@mui/material/InputAdornment';
+import Chip from '@mui/material/Chip';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import PriorityHighIcon from '@mui/icons-material/PriorityHigh';
+import Divider from '@mui/material/Divider';
+import { alpha } from '@mui/material/styles';
+import AddIcon from '@mui/icons-material/Add';
+import SaveIcon from '@mui/icons-material/Save';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import ToggleButton from '@mui/material/ToggleButton';
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
+import FlagIcon from '@mui/icons-material/Flag';
 
-const Backdrop = styled('div')({
+const Backdrop = styled('div')(({ theme }) => ({
   position: 'fixed',
   top: 0,
   left: 0,
   right: 0,
   bottom: 0,
-  background: 'rgba(0, 0, 0, 0.5)',
+  background: alpha(theme.palette.background.default, 0.8),
+  backdropFilter: 'blur(8px)',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
   zIndex: 1300,
-});
-
-const FormContainer = styled('div')(({ theme }) => ({
-  width: '45%',
-  maxWidth: 'calc(100vw - 100px)',
-  maxHeight: 'calc(100vh - 60px)',
-  margin: theme.spacing(2),
-  position: 'relative',
 }));
 
-const StyledPaper = styled(Paper)(({ theme }) => ({
+const FormContainer = styled(Paper)(({ theme }) => ({
   width: '100%',
-  height: '100%',
-  backgroundColor: theme.palette.background.paper,
+  maxWidth: '600px',
+  margin: 0,
+  display: 'flex',
+  flexDirection: 'column',
   borderRadius: theme.shape.borderRadius * 2,
-  boxShadow: theme.shadows[10],
-  position: 'relative',
-  maxHeight: 'calc(100vh - 80px)',
-  overflowY: 'auto',
-  padding: theme.spacing(4),
-  '& .close-button': {
-    position: 'absolute',
-    right: theme.spacing(2),
-    top: theme.spacing(2),
-    zIndex: 1,
-  },
+  overflow: 'hidden',
 }));
 
-const FormContent = styled(Box)(({ theme }) => ({
+const FormHeader = styled('div')(({ theme }) => ({
+  padding: theme.spacing(2, 3),
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  borderBottom: `1px solid ${theme.palette.divider}`,
+  backgroundColor: theme.palette.mode === 'dark' 
+    ? alpha(theme.palette.primary.dark, 0.15)
+    : alpha(theme.palette.primary.light, 0.15),
+}));
+
+const FormContent = styled('div')(({ theme }) => ({
+  padding: theme.spacing(3),
+  flex: 1,
+  overflowY: 'auto',
   display: 'flex',
   flexDirection: 'column',
   gap: theme.spacing(3),
-  height: '100%',
-  '& .MuiTextField-root': {
-    fontSize: '1.1rem',
+}));
+
+const FormActions = styled('div')(({ theme }) => ({
+  padding: theme.spacing(2),
+  borderTop: `1px solid ${theme.palette.divider}`,
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  backgroundColor: theme.palette.background.default,
+}));
+
+const StyledTextField = styled(TextField)(({ theme }) => ({
+  '& .MuiInputBase-root': {
+    borderRadius: theme.shape.borderRadius,
+    transition: 'none',
+    '& fieldset': {
+      transition: 'none',
+    },
+    '& input': {
+      transition: 'none',
+    },
+    '& textarea': {
+      transition: 'none',
+    },
+    '& label': {
+      transition: 'none',
+    },
   },
-  '& .MuiTypography-h5': {
-    fontSize: '1.5rem',
-    marginBottom: theme.spacing(2),
-    paddingRight: theme.spacing(6),
+  '& .MuiInputLabel-root': {
+    transition: 'none',
+  },
+  '& .MuiOutlinedInput-notchedOutline': {
+    transition: 'none',
+  },
+  '& .MuiInputAdornment-root': {
+    marginLeft: 0,
   },
 }));
 
+const PriorityToggleButton = styled(ToggleButton)(({ theme, value }) => {
+  const getColor = () => {
+    switch (value) {
+      case 'high':
+        return theme.palette.error.main;
+      case 'medium':
+        return theme.palette.warning.main;
+      case 'low':
+        return theme.palette.success.main;
+      default:
+        return theme.palette.text.primary;
+    }
+  };
+
+  const color = getColor();
+
+  return {
+    '&.MuiToggleButton-root': {
+      border: 'none',
+      borderRadius: theme.shape.borderRadius,
+      padding: theme.spacing(1, 2),
+      textTransform: 'capitalize',
+      gap: theme.spacing(1),
+      '&:hover': {
+        backgroundColor: alpha(color, 0.1),
+      },
+      '&.Mui-selected': {
+        backgroundColor: alpha(color, 0.15),
+        color: color,
+        '&:hover': {
+          backgroundColor: alpha(color, 0.25),
+        },
+      },
+    },
+    '& .MuiSvgIcon-root': {
+      fontSize: '1.2rem',
+    },
+  };
+});
+
+const DateTimePickerWrapper = styled('div')(({ theme }) => ({
+  '& .MuiTextField-root': {
+    width: '100%',
+    marginBottom: theme.spacing(2),
+  },
+  '& .MuiInputBase-root': {
+    borderRadius: theme.shape.borderRadius,
+    backgroundColor: theme.palette.background.paper,
+    transition: 'none',
+    '&:hover': {
+      backgroundColor: theme.palette.mode === 'dark' 
+        ? alpha(theme.palette.common.white, 0.05)
+        : alpha(theme.palette.common.black, 0.03),
+    },
+    '&.Mui-focused': {
+      backgroundColor: theme.palette.background.paper,
+      boxShadow: `0 0 0 2px ${alpha(theme.palette.primary.main, 0.2)}`,
+    },
+  },
+}));
+
+const InputField = styled('div')(({ theme }) => ({
+  position: 'relative',
+  width: '100%',
+  marginBottom: theme.spacing(2),
+  '& .MuiInputBase-root': {
+    paddingRight: theme.spacing(6), // Make room for the mic button
+  },
+  '& .mic-button': {
+    position: 'absolute',
+    right: theme.spacing(1),
+    top: theme.spacing(1), // Fixed position from top instead of percentage
+    zIndex: 1,
+  },
+  '& .MuiInputBase-multiline .mic-button': {
+    top: theme.spacing(1), // Specific positioning for multiline inputs
+  }
+}));
+
+const PrioritySection = styled('div')(({ theme }) => ({
+  display: 'flex',
+  alignItems: 'center',
+  gap: theme.spacing(1),
+  marginTop: theme.spacing(2),
+  flexWrap: 'wrap',
+}));
+
 const priorities = [
-  { value: 'critical', label: 'Critical Priority', color: 'error.dark' },
-  { value: 'high', label: 'High Priority', color: 'error.main' },
-  { value: 'medium', label: 'Medium Priority', color: 'warning.main' },
-  { value: 'low', label: 'Low Priority', color: 'success.main' },
+  { value: 'critical', label: 'Critical', color: 'error' },
+  { value: 'high', label: 'High', color: 'error' },
+  { value: 'medium', label: 'Medium', color: 'warning' },
+  { value: 'low', label: 'Low', color: 'success' },
 ];
 
 const TaskForm = ({ 
@@ -116,6 +244,7 @@ const TaskForm = ({
     priority: 'medium',
     dueDate: getTomorrowDate(),
     createdDate: null,
+    completedDate: null,
     speechText: '',
     language: 'en'
   });
@@ -145,19 +274,13 @@ const TaskForm = ({
 
   const handleClose = () => {
     onClose();
-    // Reset form after a small delay to ensure it's not visible
-    setTimeout(() => {
-      setFormData({
-        title: '',
-        description: '',
-        priority: 'medium',
-        dueDate: getTomorrowDate(),
-        createdDate: null,
-        speechText: '',
-        language: 'en'
-      });
-      setErrors({});
-    }, 200);
+  };
+
+  const handlePriorityChange = (newPriority) => {
+    setFormData(prev => ({
+      ...prev,
+      priority: newPriority
+    }));
   };
 
   const handleBackdropClick = (e) => {
@@ -179,11 +302,13 @@ const TaskForm = ({
   useEffect(() => {
     if (task) {
       const newFormData = {
+        id: task.id,
         title: task.title || '',
         description: task.description || '',
         priority: typeof task.priority === 'object' ? task.priority.level : (task.priority || 'medium'),
         dueDate: task.dueDate ? utcToZonedTime(new Date(task.dueDate), userTimezone) : getTomorrowDate(),
         createdDate: task.createdDate ? utcToZonedTime(new Date(task.createdDate), userTimezone) : null,
+        completedDate: task.completedDate ? utcToZonedTime(new Date(task.completedDate), userTimezone) : null,
         speechText: task.metadata?.speechText || '',
         language: task.metadata?.language || 'en'
       };
@@ -196,6 +321,7 @@ const TaskForm = ({
         priority: 'medium',
         dueDate: getTomorrowDate(),
         createdDate: zonedTimeToUtc(new Date(), userTimezone),
+        completedDate: null,
         speechText: '',
         language: 'en'
       };
@@ -253,11 +379,12 @@ const TaskForm = ({
       return;
     }
 
-    // Convert dates to UTC before submitting
+    // Keep the date in UTC format
     const submissionData = {
       ...formData,
-      dueDate: zonedTimeToUtc(formData.dueDate, userTimezone),
-      createdDate: formData.createdDate ? zonedTimeToUtc(formData.createdDate, userTimezone) : null,
+      dueDate: formData.dueDate.toISOString(),
+      createdDate: formData.createdDate ? formData.createdDate.toISOString() : null,
+      completedDate: formData.completedDate ? formData.completedDate.toISOString() : null,
       metadata: {
         speechText: formData.speechText,
         language: formData.language
@@ -266,6 +393,40 @@ const TaskForm = ({
 
     onSubmit(submissionData);
     handleClose();
+  };
+
+  const handleTaskStatusToggle = async () => {
+    if (task) {
+      try {
+        console.log('Toggling task status:', task.id, 'Current completed status:', task.completed);
+        let updatedTask;
+        if (task.completed) {
+          console.log('Reopening task...');
+          updatedTask = await window.electron.tasks.reopenTask(task.id);
+          console.log('Task reopened:', updatedTask);
+        } else {
+          console.log('Completing task...');
+          updatedTask = await window.electron.tasks.completeTask(task.id);
+          console.log('Task completed:', updatedTask);
+        }
+        
+        // Update the task in the parent component with all metadata
+        onSubmit({
+          ...updatedTask,
+          dueDate: updatedTask.dueDate ? new Date(updatedTask.dueDate) : null,
+          createdDate: updatedTask.createdDate ? new Date(updatedTask.createdDate) : null,
+          completedDate: updatedTask.completedDate ? new Date(updatedTask.completedDate) : null,
+          metadata: {
+            ...updatedTask.metadata,
+            speechText: formData.speechText,
+            language: formData.language
+          }
+        });
+        onClose();
+      } catch (error) {
+        console.error('Error updating task status:', error);
+      }
+    }
   };
 
   const handleVoiceClick = (field) => {
@@ -294,214 +455,188 @@ const TaskForm = ({
     setActiveVoiceField(null);
   };
 
+  const handleDelete = () => {
+    onDelete(task.id);
+  };
+
   return (
-    <Backdrop onClick={handleBackdropClick}>
-      <FormContainer>
-        <StyledPaper 
-          onClick={(e) => e.stopPropagation()}
-        >
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography variant="h6">
-                {task ? 'Edit Task' : 'New Task'}
-              </Typography>
-              {formData.speechText && formData.speechText.trim() !== '' && (
-                <Tooltip
-                  title={
-                    <Box>
-                      <Box sx={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: 1, 
-                        mb: 1 
-                      }}>
-                        <TranslateIcon fontSize="small" />
-                        <Typography variant="caption" sx={{ 
-                          backgroundColor: 'primary.main',
-                          color: 'primary.contrastText',
-                          px: 1,
-                          py: 0.5,
-                          borderRadius: 1,
-                          fontWeight: 'bold'
-                        }}>
-                          {formData.language.toUpperCase()}
+    <Dialog
+        open={true}
+        onClose={handleClose}
+        maxWidth="sm"
+        fullWidth
+        hideBackdrop
+        disablePortal
+        PaperProps={{
+          sx: {
+            m: 2,
+            borderRadius: 2,
+          }
+        }}
+        transitionDuration={0}
+        slotProps={{
+          backdrop: {
+            timeout: 0,
+          },
+        }}
+    >
+        <FormContainer elevation={0}>
+            <form onSubmit={handleSubmit}>
+                <FormHeader>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                            {task ? 'Edit Task' : 'New Task'}
                         </Typography>
-                      </Box>
-                      <Typography variant="body2" sx={{ 
-                        whiteSpace: 'pre-wrap',
-                        fontStyle: 'italic',
-                        color: 'text.secondary'
-                      }}>
-                        "{formData.speechText}"
+                        {formData.speechText && (
+                            <Tooltip title={formData.speechText} placement="right">
+                                <RecordVoiceOverIcon fontSize="small" color="primary" />
+                            </Tooltip>
+                        )}
+                    </Box>
+                    <IconButton onClick={handleClose} size="small">
+                        <CloseIcon />
+                    </IconButton>
+                </FormHeader>
+
+                <FormContent>
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 2 }}>
+                        <StyledTextField
+                            autoFocus
+                            fullWidth
+                            label="Title"
+                            name="title"
+                            value={formData.title}
+                            onChange={handleChange('title')}
+                            error={!!errors.title}
+                            helperText={errors.title}
+                            InputProps={{
+                              endAdornment: (
+                                <IconButton
+                                  onClick={() => handleVoiceClick('title')}
+                                  edge="end"
+                                >
+                                  <MicIcon />
+                                </IconButton>
+                              ),
+                            }}
+                        />
+                    </Box>
+
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                        <StyledTextField
+                            fullWidth
+                            multiline
+                            rows={4}
+                            label="Description"
+                            name="description"
+                            value={formData.description}
+                            onChange={handleChange('description')}
+                            InputProps={{
+                              endAdornment: (
+                                <IconButton
+                                  onClick={() => handleVoiceClick('description')}
+                                  edge="end"
+                                  sx={{ mt: 'auto', mb: 'auto' }}
+                                >
+                                  <MicIcon />
+                                </IconButton>
+                              ),
+                            }}
+                        />
+                    </Box>
+
+                    <DateTimePickerWrapper>
+                        <DateTimePicker
+                            label="Due Date"
+                            value={formData.dueDate}
+                            onChange={handleDateChange}
+                            renderInput={(params) => (
+                                <TextField
+                                    {...params}
+                                    fullWidth
+                                    error={!!errors.dueDate}
+                                    helperText={errors.dueDate}
+                                    InputProps={{
+                                        ...params.InputProps,
+                                        startAdornment: (
+                                            <InputAdornment position="start">
+                                                <AccessTimeIcon color="action" />
+                                            </InputAdornment>
+                                        ),
+                                    }}
+                                />
+                            )}
+                        />
+                    </DateTimePickerWrapper>
+
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                        Priority
                       </Typography>
-                    </Box>
-                  }
-                  placement="right"
-                  arrow
-                >
-                  <IconButton 
-                    size="small" 
-                    sx={{ 
-                      color: 'primary.main',
-                      p: 0.5,
-                      '&:hover': {
-                        backgroundColor: 'primary.main',
-                        color: 'primary.contrastText'
-                      }
-                    }}
-                  >
-                    <RecordVoiceOverIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-              )}
-            </Box>
-            <IconButton onClick={handleClose}>
-              <CloseIcon />
-            </IconButton>
-          </Box>
-          
-          <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1 }}>
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 2 }}>
-              <TextField
-                label="Title"
-                value={formData.title}
-                onChange={handleChange('title')}
-                error={Boolean(errors.title)}
-                helperText={errors.title}
-                fullWidth
-                required
-                InputProps={{
-                  endAdornment: (
-                    <Tooltip title={isWhisperReady ? "Record voice" : "Loading speech recognition..."}>
-                      <IconButton
-                        onClick={() => handleVoiceClick('title')}
-                        color="primary"
+                      <ToggleButtonGroup
+                        value={formData.priority}
+                        exclusive
+                        onChange={(e, newPriority) => {
+                          if (newPriority !== null) {
+                            handlePriorityChange(newPriority);
+                          }
+                        }}
+                        fullWidth
                         size="small"
-                        disabled={!isWhisperReady}
-                        edge="end"
                       >
-                        <MicIcon />
-                      </IconButton>
-                    </Tooltip>
-                  ),
-                }}
-              />
-            </Box>
-
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', mb: 2 }}>
-              <TextField
-                fullWidth
-                label="Description"
-                name="description"
-                value={formData.description}
-                onChange={handleChange('description')}
-                error={Boolean(errors.description)}
-                helperText={errors.description}
-                multiline
-                rows={4}
-                InputProps={{
-                  endAdornment: (
-                    <Box sx={{ 
-                      position: 'absolute', 
-                      right: '8px',
-                      height: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      pointerEvents: 'none',
-                      '& .MuiButtonBase-root': {
-                        pointerEvents: 'auto'
-                      }
-                    }}>
-                      <Tooltip title={isWhisperReady ? "Record voice" : "Loading speech recognition..."}>
-                        <IconButton
-                          onClick={() => handleVoiceClick('description')}
-                          color="primary"
-                          size="small"
-                          disabled={!isWhisperReady}
-                          edge="end"
-                        >
-                          <MicIcon />
-                        </IconButton>
-                      </Tooltip>
+                        <PriorityToggleButton value="low">
+                          <FlagIcon /> Low
+                        </PriorityToggleButton>
+                        <PriorityToggleButton value="medium">
+                          <FlagIcon /> Medium
+                        </PriorityToggleButton>
+                        <PriorityToggleButton value="high">
+                          <FlagIcon /> High
+                        </PriorityToggleButton>
+                      </ToggleButtonGroup>
                     </Box>
-                  ),
-                }}
-              />
-            </Box>
+                </FormContent>
 
-            <TextField
-              select
-              fullWidth
-              label="Priority"
-              name="priority"
-              value={formData.priority}
-              onChange={handleChange('priority')}
-              margin="normal"
-            >
-              <MenuItem value="low">Low</MenuItem>
-              <MenuItem value="medium">Medium</MenuItem>
-              <MenuItem value="high">High</MenuItem>
-            </TextField>
-
-            <DateTimePicker
-              label="Due Date"
-              value={formData.dueDate}
-              onChange={(newValue) => handleDateChange(newValue)}
-              renderInput={(params) => <TextField {...params} fullWidth margin="normal" />}
+                <FormActions>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                        {task && (
+                            <Tooltip title="Delete task">
+                                <IconButton onClick={handleDelete} size="small" color="error">
+                                    <DeleteIcon />
+                                </IconButton>
+                            </Tooltip>
+                        )}
+                    </Box>
+                    <Box sx={{ display: 'flex', gap: 2 }}>
+                        {task && (
+                            <Button
+                                onClick={handleTaskStatusToggle}
+                                color={task.completed ? "primary" : "success"}
+                                startIcon={task.completed ? <RefreshIcon /> : <CheckCircleIcon />}
+                            >
+                                {task.completed ? 'Reopen Task' : 'Complete'}
+                            </Button>
+                        )}
+                        <Button
+                            variant="contained"
+                            type="submit"
+                            startIcon={task ? <SaveIcon /> : <AddIcon />}
+                        >
+                            {task ? 'Save Changes' : 'Add Task'}
+                        </Button>
+                    </Box>
+                </FormActions>
+            </form>
+        </FormContainer>
+        
+        {showVoiceDialog && (
+            <VoiceRecordDialog
+                open={showVoiceDialog}
+                onClose={handleVoiceDialogClose}
+                onTranscriptionComplete={handleTranscriptionComplete}
             />
-
-            {task && task.createdDate && (
-              <TextField
-                label="Created Date"
-                type="datetime-local"
-                value={formData.createdDate ? formData.createdDate.toISOString().slice(0, 16) : ''}
-                InputProps={{
-                  readOnly: true,
-                }}
-                InputLabelProps={{
-                  shrink: true,
-                }}
-                fullWidth
-              />
-            )}
-
-            <Box sx={{ mt: 3, display: 'flex', justifyContent: 'space-between' }}>
-              {task && (
-                <Button
-                  variant="outlined"
-                  color="error"
-                  onClick={() => onDelete(task.id)}
-                >
-                  Delete
-                </Button>
-              )}
-              <Box sx={{ ml: 'auto', display: 'flex', gap: 2 }}>
-                <Button
-                  variant="outlined"
-                  onClick={handleClose}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  variant="contained"
-                  color="primary"
-                >
-                  {task ? 'Update' : 'Create'} Task
-                </Button>
-              </Box>
-            </Box>
-          </Box>
-        </StyledPaper>
-      </FormContainer>
-
-      <VoiceRecordDialog
-        open={showVoiceDialog}
-        onClose={handleVoiceDialogClose}
-        onTranscriptionComplete={handleTranscriptionComplete}
-        autoStartRecording={true}
-      />
-    </Backdrop>
+        )}
+    </Dialog>
   );
 };
 

@@ -1,9 +1,24 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Tray, Menu } = require('electron');
 const path = require('path');
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
 const Store = require('electron-store');
+const taskService = require('./services/taskService');
+const settingsService = require('./services/settingsService');
 const store = new Store();
+
+// Set app metadata before anything else
+if (process.defaultApp) {
+  if (process.argv.length >= 2) {
+    app.setPath('userData', path.join(app.getPath('userData'), 'Task Master'));
+  }
+} else {
+  app.setPath('userData', path.join(app.getPath('userData'), 'Task Master'));
+}
+
+// Set app name and other metadata
+app.setName('Task Master');
+app.setAppUserModelId('com.taskmaster.app');
 
 // Initialize store defaults for AI service if not already set
 if (!store.get('aiService')) {
@@ -35,6 +50,7 @@ if (require('electron-squirrel-startup')) {
 require('dotenv').config();
 
 let mainWindow;
+let tray = null;
 let updateCheckInProgress = false;
 
 // Check if we're in development mode
@@ -53,12 +69,269 @@ const packageJson = require('../package.json');
 // Initialize AI Service after app is ready
 let aiService;
 
+// Initialize all IPC handlers before creating window
+function initializeIpcHandlers() {
+  // Window control handlers
+  ipcMain.handle('window-control', (event, command) => {
+    if (!mainWindow) return;
+    
+    switch (command) {
+      case 'minimize':
+        mainWindow.minimize();
+        break;
+      case 'maximize':
+        if (mainWindow.isMaximized()) {
+          mainWindow.unmaximize();
+        } else {
+          mainWindow.maximize();
+        }
+        break;
+      case 'close':
+        mainWindow.close();
+        break;
+      case 'minimize-to-tray':
+        minimizeToTray();
+        break
+    }
+  });
+
+  // Task handlers
+  ipcMain.handle('get-tasks', () => taskService.getTasks());
+  ipcMain.handle('add-task', (_, task) => taskService.addTask(task));
+  ipcMain.handle('update-task', (_, task) => taskService.updateTask(task));
+  ipcMain.handle('delete-task', (_, taskId) => taskService.deleteTask(taskId));
+  ipcMain.handle('save-tasks', (_, tasks) => taskService.saveTasks(tasks));
+
+  // Expose task service methods
+  ipcMain.handle('completeTask', async (event, taskId) => {
+    return await taskService.completeTask(taskId);
+  });
+
+  ipcMain.handle('reopenTask', async (event, taskId) => {
+    return await taskService.reopenTask(taskId);
+  });
+
+  // Store handlers
+  ipcMain.handle('get-store-value', (event, key) => {
+    return store.get(key);
+  });
+
+  ipcMain.handle('set-store-value', (event, key, value) => {
+    store.set(key, value);
+  });
+
+  // Preference handlers
+  ipcMain.handle('preferences:get', (event, key) => {
+    return store.get(`aiService.${key}`);
+  });
+
+  ipcMain.handle('preferences:set', (event, key, value) => {
+    store.set(`aiService.${key}`, value);
+  });
+
+  ipcMain.handle('preferences:getAll', () => {
+    return store.get('aiService');
+  });
+
+  // Notification handlers
+  ipcMain.handle('show-notification', (_, { title, body }) => {
+    taskService.showNotification(title, body);
+  });
+
+  ipcMain.handle('test-notification', () => {
+    taskService.testNotification();
+  });
+
+  // Version handlers
+  ipcMain.handle('get-app-version', () => {
+    return packageJson.version;
+  });
+
+  ipcMain.on('get-version', (event) => {
+    event.returnValue = packageJson.version;
+  });
+
+  // Update handlers
+  ipcMain.handle('download-update', async () => {
+    try {
+      log.info('Starting update download...');
+      await autoUpdater.downloadUpdate();
+      return { success: true };
+    } catch (error) {
+      log.error('Failed to download update:', error);
+      return { 
+        success: false, 
+        error: error?.message || error?.toString() || 'Unknown error'
+      };
+    }
+  });
+
+  ipcMain.handle('check-for-updates', async () => {
+    try {
+      if (!updateCheckInProgress) {
+        log.info('Manually checking for updates...');
+        await autoUpdater.checkForUpdates();
+        return { success: true };
+      }
+      return { success: false, error: 'Update check already in progress' };
+    } catch (error) {
+      log.error('Failed to check for updates:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Handle notification clicks
+  ipcMain.on('notification-clicked', (_, taskId) => {
+    log.info('Handling notification click for task:', taskId);
+    
+    // Show and focus the window
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore();
+      }
+      mainWindow.show();
+      mainWindow.focus();
+      
+      // Send event to renderer to show the task
+      mainWindow.webContents.send('show-task', taskId);
+    } else {
+      log.error('Main window not available');
+      createWindow().then(() => {
+        mainWindow.webContents.send('show-task', taskId);
+      });
+    }
+  });
+}
+
+function initializeSettingsHandlers() {
+  ipcMain.handle('settings:get', () => {
+    return settingsService.getSettings();
+  });
+
+  ipcMain.handle('settings:setTheme', (_, theme) => {
+    return settingsService.setTheme(theme);
+  });
+
+  ipcMain.handle('settings:setNotifications', (_, level) => {
+    return settingsService.setNotifications(level);
+  });
+
+  ipcMain.handle('settings:setMinimizeToTray', (_, enabled) => {
+    return settingsService.setMinimizeToTray(enabled);
+  });
+
+  ipcMain.handle('settings:setAutoStart', (_, enabled) => {
+    return settingsService.setAutoStart(enabled);
+  });
+}
+
+function scheduleNextMinuteCheck() {
+  const now = new Date();
+  const nextMinute = new Date(now);
+  nextMinute.setSeconds(0);
+  nextMinute.setMilliseconds(0);
+  nextMinute.setMinutes(nextMinute.getMinutes() + 1);
+  
+  const delay = nextMinute.getTime() - now.getTime();
+  return setTimeout(() => {
+    checkTaskDueDates();
+    // Schedule next check
+    scheduleNextMinuteCheck();
+  }, delay);
+}
+
+function checkTaskDueDates() {
+  const now = new Date();
+  const tasks = store.get('tasks') || [];
+  
+  tasks.forEach(task => {
+    // Skip completed tasks
+    if (task.completed) return;
+    
+    if (task.dueDate) {
+      const dueDate = new Date(task.dueDate);
+      // Set seconds and milliseconds to 0 for exact minute comparison
+      dueDate.setSeconds(0);
+      dueDate.setMilliseconds(0);
+      
+      const currentMinute = new Date(now);
+      currentMinute.setSeconds(0);
+      currentMinute.setMilliseconds(0);
+      
+      // Only notify if:
+      // 1. Current minute exactly matches the due minute
+      // 2. Task hasn't been notified before
+      // 3. Task is not completed
+      if (dueDate.getTime() === currentMinute.getTime() && !task.notified) {
+        showNotification('Task Master', `Task "${task.title}" is due now!`);
+        
+        // Mark task as notified
+        const updatedTasks = tasks.map(t => 
+          t.id === task.id ? { ...t, notified: true } : t
+        );
+        store.set('tasks', updatedTasks);
+      }
+    }
+  });
+}
+
+function createTray() {
+  if (tray) return; // Prevent multiple tray instances
+
+  const iconPath = path.join(__dirname, '../assets/icon.png');
+  tray = new Tray(iconPath);
+  
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: 'Show App',
+      click: () => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.show();
+        }
+      }
+    },
+    {
+      label: 'Exit',
+      click: () => {
+        app.quit();
+      }
+    }
+  ]);
+
+  tray.setToolTip('Task Master');
+  tray.setContextMenu(contextMenu);
+
+  tray.on('click', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show();
+    }
+  });
+}
+
+function minimizeToTray() {
+  if (!mainWindow) return;
+  
+  // Ensure window exists and is valid before hiding
+  if (!mainWindow.isDestroyed()) {
+    mainWindow.hide();
+  }
+}
+
+function showNotification(title, body) {
+  new Notification({
+    title: title,
+    body: body,
+    icon: path.join(__dirname, '../assets/icon.png')
+  }).show();
+}
+
 function createWindow() {
   // Create the browser window.
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
-    frame: false, // Remove default window frame
+    frame: false,
+    show: false,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -69,7 +342,7 @@ function createWindow() {
       v8CacheOptions: 'bypassHeatCheck',
       preload: path.join(__dirname, 'preload.js'),
       backgroundThrottling: true,
-      devTools: true, // Enable DevTools capability
+      devTools: true,
     },
     backgroundColor: '#ffffff',
   });
@@ -92,6 +365,11 @@ function createWindow() {
         ]
       }
     });
+  });
+
+  // Wait for window to be ready before showing
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
   });
 
   // Enable WebGPU and GPU features
@@ -143,22 +421,40 @@ function createWindow() {
   });
 
   // Optimize memory usage
-  mainWindow.on('minimize', () => {
-    if (!isDev) {
-      mainWindow.webContents.session.clearCache();
-    }
+  mainWindow.on('minimize', (event) => {
+    event.preventDefault();
+    minimizeToTray();
   });
 
   // Handle window closed
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+
+  // Handle window state
+  let isQuitting = false;
+
+  app.on('before-quit', () => {
+    isQuitting = true;
+  });
+
+  mainWindow.on('close', (event) => {
+    const settings = settingsService.getSettings();
+    if (settings.minimizeToTray) {
+      event.preventDefault();
+      mainWindow.hide();
+    }
+  });
 }
 
 // This method will be called when Electron has finished initialization
 app.whenReady().then(async () => {
-  // Initialize AI service first
+  // Initialize all handlers
+  initializeIpcHandlers();
+  initializeSettingsHandlers();
+
   try {
+    // Initialize AI service
     aiService = require('./services/aiService');
     // Only try to initialize if we have an API key
     const config = store.get('aiService');
@@ -173,6 +469,16 @@ app.whenReady().then(async () => {
   }
   
   createWindow();
+  createTray();
+  
+  // Start task checking service with immediate check
+  taskService.startTaskChecking();
+  
+  // Test notification system on startup
+  setTimeout(() => {
+    log.info('Testing notification system on startup');
+    taskService.testNotification();
+  }, 5000); // Wait 5 seconds after startup
   
   if (app.isPackaged) {
     // Auto-updater configuration
@@ -247,36 +553,6 @@ app.whenReady().then(async () => {
       mainWindow?.webContents.send('update-not-available');
     });
 
-    // Handle update download request
-    ipcMain.handle('download-update', async () => {
-      try {
-        log.info('Starting update download...');
-        await autoUpdater.downloadUpdate();
-        return { success: true };
-      } catch (error) {
-        log.error('Failed to download update:', error);
-        return { 
-          success: false, 
-          error: error?.message || error?.toString() || 'Unknown error'
-        };
-      }
-    });
-
-    // Handle update check request
-    ipcMain.handle('check-for-updates', async () => {
-      try {
-        if (!updateCheckInProgress) {
-          log.info('Manually checking for updates...');
-          await autoUpdater.checkForUpdates();
-          return { success: true };
-        }
-        return { success: false, error: 'Update check already in progress' };
-      } catch (error) {
-        log.error('Failed to check for updates:', error);
-        return { success: false, error: error.message };
-      }
-    });
-
     // Initial check
     setTimeout(() => {
       if (!updateCheckInProgress) {
@@ -301,7 +577,14 @@ app.whenReady().then(async () => {
 
 // Quit when all windows are closed.
 app.on('window-all-closed', () => {
+  // Stop task checking service
+  taskService.stopTaskChecking();
+  
   if (process.platform !== 'darwin') {
+    if (tray) {
+      tray.destroy();
+      tray = null;
+    }
     app.quit();
   }
 });
@@ -310,90 +593,4 @@ app.on('activate', () => {
   if (mainWindow === null) {
     createWindow();
   }
-});
-
-// IPC handlers
-ipcMain.handle('get-app-version', () => {
-  return packageJson.version;
-});
-
-ipcMain.handle('get-store-value', (event, key) => {
-  return store.get(key);
-});
-
-ipcMain.handle('set-store-value', (event, key, value) => {
-  store.set(key, value);
-});
-
-ipcMain.handle('get-tasks', () => {
-  return store.get('tasks') || [];
-});
-
-ipcMain.handle('add-task', (_, task) => {
-  const tasks = store.get('tasks') || [];
-  tasks.push(task);
-  store.set('tasks', tasks);
-  return task;
-});
-
-ipcMain.handle('update-task', (_, updatedTask) => {
-  const tasks = store.get('tasks') || [];
-  const index = tasks.findIndex(task => task.id === updatedTask.id);
-  if (index !== -1) {
-    tasks[index] = updatedTask;
-    store.set('tasks', tasks);
-    return updatedTask;
-  }
-  throw new Error('Task not found');
-});
-
-ipcMain.handle('delete-task', (_, taskId) => {
-  const tasks = store.get('tasks') || [];
-  const filteredTasks = tasks.filter(task => task.id !== taskId);
-  store.set('tasks', filteredTasks);
-  return taskId;
-});
-
-ipcMain.handle('save-tasks', (_, tasks) => {
-  store.set('tasks', tasks);
-  return true;
-});
-
-// Add IPC handlers for preferences
-ipcMain.handle('preferences:get', (event, key) => {
-  return store.get(`aiService.${key}`);
-});
-
-ipcMain.handle('preferences:set', (event, key, value) => {
-  store.set(`aiService.${key}`, value);
-});
-
-ipcMain.handle('preferences:getAll', () => {
-  return store.get('aiService');
-});
-
-// Window control handlers
-ipcMain.handle('window-control', (_, command) => {
-  if (!mainWindow) return;
-  
-  switch (command) {
-    case 'minimize':
-      mainWindow.minimize();
-      break;
-    case 'maximize':
-      if (mainWindow.isMaximized()) {
-        mainWindow.unmaximize();
-      } else {
-        mainWindow.maximize();
-      }
-      break;
-    case 'close':
-      mainWindow.close();
-      break;
-  }
-});
-
-// Handle version request
-ipcMain.on('get-version', (event) => {
-  event.returnValue = packageJson.version;
 });

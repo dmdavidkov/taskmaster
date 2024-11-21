@@ -29,6 +29,8 @@ contextBridge.exposeInMainWorld('electron', {
     updateTask: (task) => ipcRenderer.invoke('update-task', task),
     deleteTask: (taskId) => ipcRenderer.invoke('delete-task', taskId),
     saveTasks: (tasks) => ipcRenderer.invoke('save-tasks', tasks),
+    completeTask: (taskId) => ipcRenderer.invoke('completeTask', taskId),
+    reopenTask: (taskId) => ipcRenderer.invoke('reopenTask', taskId),
   },
   updates: {
     checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
@@ -51,9 +53,24 @@ contextBridge.exposeInMainWorld('electron', {
     set: (key, value) => ipcRenderer.invoke('preferences:set', key, value),
     getAll: () => ipcRenderer.invoke('preferences:getAll'),
   },
+  settings: {
+    get: () => ipcRenderer.invoke('settings:get'),
+    setTheme: (theme) => ipcRenderer.invoke('settings:setTheme', theme),
+    setNotifications: (level) => ipcRenderer.invoke('settings:setNotifications', level),
+    setMinimizeToTray: (enabled) => ipcRenderer.invoke('settings:setMinimizeToTray', enabled),
+    setAutoStart: (enabled) => ipcRenderer.invoke('settings:setAutoStart', enabled),
+  },
   window: {
     minimize: () => ipcRenderer.invoke('window-control', 'minimize'),
     maximize: () => ipcRenderer.invoke('window-control', 'maximize'),
     close: () => ipcRenderer.invoke('window-control', 'close'),
+    minimizeToTray: () => ipcRenderer.invoke('window-control', 'minimize-to-tray'),
+  },
+  notifications: {
+    show: (title, body) => ipcRenderer.invoke('show-notification', { title, body }),
+    test: () => ipcRenderer.invoke('test-notification')
+  },
+  onShowTask: (callback) => {
+    ipcRenderer.on('show-task', (_, taskId) => callback(taskId));
   }
 });

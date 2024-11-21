@@ -186,6 +186,17 @@ const TaskList = ({
     }
   }, [tasks, selectedTab, searchQuery, sortBy]);
 
+  const handleTaskToggle = async (taskId, currentCompletedState) => {
+    try {
+      const updatedTask = currentCompletedState
+        ? await window.electron.tasks.reopenTask(taskId)
+        : await window.electron.tasks.completeTask(taskId);
+      onTaskToggle(taskId, updatedTask);
+    } catch (error) {
+      console.error('Error toggling task:', error);
+    }
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
@@ -363,7 +374,7 @@ const TaskList = ({
                 className="complete-button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onTaskToggle(task.id);
+                  handleTaskToggle(task.id, task.completed);
                 }}
                 color={task.completed ? 'success' : 'default'}
               >
@@ -401,9 +412,9 @@ const TaskList = ({
                       variant={isTaskExpired(task.dueDate) || isTaskToday(task.dueDate) ? 'filled' : 'outlined'}
                     />
                   )}
-                  {task.completed && task.completedAt && (
+                  {task.completed && task.completedDate && (
                     <Chip
-                      label={`Completed: ${formatDate(task.completedAt)}`}
+                      label={`Completed: ${formatDate(task.completedDate)}`}
                       size="small"
                       color="success"
                       variant="filled"

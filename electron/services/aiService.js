@@ -139,68 +139,36 @@ class AIService {
         }
     }
 
-    async processText(text, language = 'en') {
-        await this.ensureInitialized();
-        
-        // Get fresh config before processing
-        const config = this.getCurrentConfig();
-        if (config.apiKey !== this.currentApiKey) {
-            await this.initializeClient(config);
+    async processText({ text, language = 'en' }) {
+        if (!this.isInitialized) {
+            throw new Error('AI service not initialized');
         }
 
         try {
-            log.info('Processing text input:', text);
-            log.info('Language:', language);
-            
-            // Get current time in UTC
+            // Get user's timezone
+            const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
             const now = new Date();
-            const utcDateTime = now.toISOString();
-            // Get user's timezone offset in minutes
-            const tzOffset = now.getTimezoneOffset();
+            const tzOffset = -now.getTimezoneOffset(); // Note: getTimezoneOffset() returns the opposite of what we want
+
+            log.info('Processing text input: ', text);
+            log.info('Language:', language);
+            log.info('Timezone info:', {
+                localTime: now.toLocaleString(),
+                localISOTime: now.toISOString(),
+                tzOffset,
+                userTimezone
+            });
+
+            // Prepare the system message
+            const systemMessage = this.getSystemMessage(language);
             
             const completion = await this.client.chat.completions.create({
-                temperature: 0,
-                max_tokens: 2048,
                 model: this.modelName,
                 messages: [
-                    {
-                        role: "system",
-                        content: `You are a multilingual task extraction assistant. Extract task information from user input and return it in JSON format.
-                        The current UTC date and time is: ${utcDateTime}
-                        The user's timezone offset is: ${-tzOffset} minutes from UTC
-                        
-                        Return ONLY JSON in this format, with no additional text:
-                        {
-                            "title": "Task title",
-                            "description": "Task description",
-                            "dueDate": "ISO date string",
-                            "priority": "low|medium|high",
-                            "metadata": {
-                                "confidence": 0.0-1.0,
-                                "language": "detected language code"
-                            }
-                        }
-                        
-                        If the input is unclear or cannot be converted to a task, return this JSON:
-                        {
-                            "error": "Unable to create task from input",
-                            "reason": "Brief explanation why in user-friendly language"
-                        }
-                        
-                        Follow these rules:
-                        - Title should be actionable and natural in the target language
-                        - Description should include context and details not in the title
-                        - Convert relative dates (tomorrow, next week) to actual dates using ${utcDateTime} as reference
-                        - Return dates in ISO format adjusted for the user's timezone (${-tzOffset} minutes from UTC)
-                        - Infer priority from urgency words and context in the given language
-                        - Preserve any language-specific formatting or special characters
-                        - Focus on delivering gramatically and punctually correct responses`
-                    },
-                    {
-                        role: "user",
-                        content: text
-                    }
-                ]
+                    { role: "system", content: systemMessage },
+                    { role: "user", content: text }
+                ],
+                temperature: 0.7,
             });
 
             const result = completion.choices[0]?.message?.content;
@@ -208,19 +176,40 @@ class AIService {
                 throw new Error('No response from AI service');
             }
 
-            const parsedResult = this.cleanJsonResponse(result);
-            
-            // Check if the AI returned an error response
-            if (parsedResult.error) {
+            log.info('Raw API response:', result);
+
+            // Parse the result
+            let parsedResult;
+            try {
+                parsedResult = JSON.parse(result);
+            } catch (error) {
+                log.error('Error parsing AI response:', error);
+                throw new Error('Invalid response format from AI service');
+            }
+
+            log.info('Extracted task JSON:', parsedResult);
+
+            if (!parsedResult.title) {
                 throw new Error(parsedResult.reason || parsedResult.error);
             }
 
-            // Convert dates back to local time if they exist
+            // Process the due date to ensure correct timezone
             if (parsedResult.dueDate) {
+                // Create date object from the AI response and keep it in UTC
                 const dueDate = new Date(parsedResult.dueDate);
+                
+                // Log timezone debugging information
+                log.info('Date processing:', {
+                    original: parsedResult.dueDate,
+                    parsed: dueDate.toISOString(),
+                    tzOffset,
+                    userTimezone
+                });
+                
+                // Keep the date in UTC format
                 parsedResult.dueDate = dueDate.toISOString();
             }
-            
+
             const finalResult = {
                 title: parsedResult.title || 'Untitled Task',
                 description: parsedResult.description || '',
@@ -243,9 +232,42 @@ class AIService {
             if (error.response?.status === 401) {
                 throw new Error('AI service authentication failed. Please check your API key in Settings.');
             }
-            // Pass through the original error message instead of using a generic one
             throw error;
         }
+    }
+
+    getSystemMessage(language) {
+        return `You are a multilingual task extraction assistant. Extract task information from user input and return it in JSON format.
+        Current local time: ${new Date().toLocaleString()}
+        Local ISO time: ${new Date().toISOString()}
+        Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone} (UTC${-new Date().getTimezoneOffset()/60})
+        
+        Return ONLY JSON in this format, with no additional text:
+        {
+            "title": "Task title",
+            "description": "Task description",
+            "dueDate": "ISO date string",
+            "priority": "low|medium|high",
+            "metadata": {
+                "confidence": 0.0-1.0,
+                "language": "detected language code"
+            }
+        }
+        
+        If the input is unclear or cannot be converted to a task, return this JSON:
+        {
+            "error": "Unable to create task from input",
+            "reason": "Brief explanation why in user-friendly language"
+        }
+        
+        Follow these rules:
+        - Title should be actionable and natural in the target language
+        - Description should include context and details not in the title
+        - Convert relative dates (tomorrow, next week) to actual dates using the current local time
+        - For "in X minutes" requests, add exactly X minutes to ${new Date().toLocaleTimeString()}
+        - Return dates in ISO format but calculate them based on local time ${new Date().toLocaleString()}
+        - Infer priority from urgency words and context in the given language
+        - Preserve any language-specific formatting or special characters`;
     }
 
     async testConnection(config) {
@@ -302,7 +324,7 @@ const aiService = new AIService();
 // Handle IPC calls
 ipcMain.handle('ai:processText', async (event, { text, language }) => {
     try {
-        return await aiService.processText(text, language);
+        return await aiService.processText({ text, language });
     } catch (error) {
         log.error('Error in ai:processText:', error);
         throw error;

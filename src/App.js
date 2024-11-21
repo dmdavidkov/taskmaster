@@ -105,7 +105,25 @@ function App() {
   useEffect(() => {
     // Initialize app when component mounts
     initializeApp();
-  }, []);
+
+    // Listen for show-task events from notifications
+    window.electron?.onShowTask((taskId) => {
+      const taskToShow = tasks.find(t => t.id === taskId);
+      if (taskToShow) {
+        setSelectedTask(taskToShow);
+        setDrawerOpen(true);
+      }
+    });
+
+    // Listen for theme changes from settings
+    const handleThemeChange = (event) => {
+      if (event.detail && typeof event.detail.darkMode === 'boolean') {
+        setDarkMode(event.detail.darkMode);
+      }
+    };
+    window.addEventListener('themeChange', handleThemeChange);
+    return () => window.removeEventListener('themeChange', handleThemeChange);
+  }, [tasks]); // Re-run when tasks change to ensure we have latest task list
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -230,6 +248,25 @@ function App() {
     }
   };
 
+  const handleTaskToggle = async (taskId, updatedTask) => {
+    if (updatedTask) {
+      // If we have the updated task data, use it directly
+      handleTaskAction(updateTask, updatedTask);
+    } else {
+      // Fallback to just toggling the task
+      const task = tasks.find(t => t.id === taskId);
+      if (task) {
+        const action = task.completed ? window.electron.tasks.reopenTask : window.electron.tasks.completeTask;
+        try {
+          const updated = await action(taskId);
+          handleTaskAction(updateTask, updated);
+        } catch (error) {
+          console.error('Error toggling task:', error);
+        }
+      }
+    }
+  };
+
   return (
     <ErrorBoundary>
       <ThemeProvider theme={theme}>
@@ -330,7 +367,7 @@ function App() {
                   sortBy={sortBy}
                   compact={compactView}
                   onTaskClick={handleTaskClick}
-                  onTaskToggle={toggleTaskCompletion}
+                  onTaskToggle={handleTaskToggle}
                   onTaskDelete={handleDeleteTask}
                 />
               </Box>

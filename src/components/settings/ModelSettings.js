@@ -302,6 +302,18 @@ const ModelSettings = ({
         </Button>
       </Box>
 
+      <FormControlLabel
+        control={
+          <Switch
+            checked={autoLoadModel}
+            onChange={onAutoLoadChange}
+            disabled={whisperLoading}
+          />
+        }
+        label="Auto-load model on startup"
+        sx={{ mt: 1 }}
+      />
+
       {renderModelStatus()}
     </Box>
   );

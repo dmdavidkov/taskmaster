@@ -10,7 +10,6 @@ import {
 } from '@mui/material';
 import MicIcon from '@mui/icons-material/Mic';
 import StopIcon from '@mui/icons-material/Stop';
-import useWhisperStore from '../../stores/whisperStore';
 
 export const LANGUAGE_OPTIONS = [
   { value: 'en', label: 'English', nativeName: 'English' },
@@ -28,12 +27,12 @@ export const LANGUAGE_OPTIONS = [
 const AudioSettings = ({
   isRecording,
   isProcessing,
+  selectedLanguage,
+  onLanguageChange,
   onStartRecording,
   onStopRecording,
   transcriptionResult
 }) => {
-  const { selectedLanguage, updateLanguage } = useWhisperStore();
-
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
       <Typography variant="h6">Audio Settings</Typography>
@@ -42,14 +41,14 @@ const AudioSettings = ({
         <InputLabel>Language</InputLabel>
         <Select
           value={selectedLanguage}
-          onChange={(e) => updateLanguage(e.target.value)}
+          onChange={(e) => onLanguageChange(e.target.value)}
           label="Language"
         >
           {LANGUAGE_OPTIONS.map((lang) => (
             <MenuItem key={lang.value} value={lang.value}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
                 <Typography>{lang.label}</Typography>
-                <Typography variant="body2" color="text.secondary">
+                <Typography color="text.secondary" sx={{ ml: 2 }}>
                   {lang.nativeName}
                 </Typography>
               </Box>
@@ -75,16 +74,35 @@ const AudioSettings = ({
         )}
       </Box>
 
-      {transcriptionResult && (
-        <Box sx={{ mt: 2 }}>
-          <Typography variant="subtitle2" gutterBottom>
-            Transcription Result:
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {transcriptionResult}
-          </Typography>
+      <Box sx={{ 
+        mt: 2,
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column'
+      }}>
+        <Typography variant="subtitle2" gutterBottom>
+          Transcription Result:
+        </Typography>
+        <Box sx={{ 
+          flex: 1,
+          bgcolor: 'background.paper',
+          borderRadius: 1,
+          p: 2,
+          border: 1,
+          borderColor: 'divider',
+          overflowY: 'auto'
+        }}>
+          {transcriptionResult ? (
+            <Typography variant="body2">
+              {transcriptionResult}
+            </Typography>
+          ) : (
+            <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+              Record some audio to see the transcription here...
+            </Typography>
+          )}
         </Box>
-      )}
+      </Box>
     </Box>
   );
 };

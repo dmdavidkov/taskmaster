@@ -8,8 +8,12 @@ import {
   Box,
   Tabs,
   Tab,
-  styled
+  styled,
+  Typography,
+  IconButton,
+  alpha
 } from '@mui/material';
+import CloseIcon from '@mui/icons-material/Close';
 import useWhisperStore from '../stores/whisperStore';
 import ModelSettings from './settings/ModelSettings';
 import AudioSettings from './settings/AudioSettings';
@@ -39,11 +43,14 @@ const StyledDialog = styled(Dialog)(({ theme }) => ({
   '& .MuiDialogTitle-root': {
     padding: theme.spacing(2, 3),
     borderBottom: `1px solid ${theme.palette.divider}`,
+    backgroundColor: theme.palette.mode === 'dark' 
+      ? alpha(theme.palette.primary.dark, 0.15)
+      : alpha(theme.palette.primary.light, 0.15),
   },
   '& .MuiDialogContent-root': {
     flex: 1,
     overflowY: 'auto',
-    padding: theme.spacing(3),
+    padding: 0,
     '&::-webkit-scrollbar': {
       width: '8px',
       backgroundColor: 'transparent',
@@ -68,9 +75,20 @@ const StyledDialog = styled(Dialog)(({ theme }) => ({
       : 'rgba(0, 0, 0, 0.2)'} transparent`,
   },
   '& .MuiDialogActions-root': {
-    padding: theme.spacing(2, 3),
+    padding: theme.spacing(0.75, 2),
     borderTop: `1px solid ${theme.palette.divider}`,
+    backgroundColor: theme.palette.background.default,
+    '& .MuiButton-root': {
+      minHeight: 28,
+      padding: theme.spacing(0.5, 2),
+    }
   }
+}));
+
+const StyledTabPanel = styled(Box)(({ theme }) => ({
+  padding: theme.spacing(2, 3),
+  height: '100%',
+  overflow: 'auto',
 }));
 
 function TabPanel({ children, value, index, ...other }) {
@@ -80,12 +98,13 @@ function TabPanel({ children, value, index, ...other }) {
       hidden={value !== index}
       id={`settings-tabpanel-${index}`}
       aria-labelledby={`settings-tab-${index}`}
+      style={{ height: '100%' }}
       {...other}
     >
       {value === index && (
-        <Box sx={{ p: 2 }}>
+        <StyledTabPanel>
           {children}
-        </Box>
+        </StyledTabPanel>
       )}
     </div>
   );
@@ -104,17 +123,29 @@ const Settings = ({ open, onClose, initialTab = 0 }) => {
     updateModelConfig,
     resetSetup,
     autoLoadModel,
-    updateAutoLoadModel
+    updateAutoLoadModel,
+    selectedLanguage,
+    updateLanguage
   } = useWhisperStore();
   
   const [currentTab, setCurrentTab] = useState(initialTab);
+  const [generalSettings, setGeneralSettings] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingStream, setRecordingStream] = useState(null);
   const [audioChunks, setAudioChunks] = useState([]);
   const [transcriptionResult, setTranscriptionResult] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const recorderRef = React.useRef(null);
-  const [selectedLanguage, setSelectedLanguage] = useState(localStorage.getItem('whisperLanguage') || 'en');
+
+  useEffect(() => {
+    window.electron.settings.get().then(savedSettings => {
+      setGeneralSettings(savedSettings);
+    });
+  }, []);
+
+  const handleSettingsChange = (newSettings) => {
+    setGeneralSettings(newSettings);
+  };
 
   useEffect(() => {
     let tabIndex = 0;
@@ -229,7 +260,6 @@ const Settings = ({ open, onClose, initialTab = 0 }) => {
   };
 
   const handleSave = () => {
-    localStorage.setItem('whisperLanguage', selectedLanguage);
     handleClose();
   };
 
@@ -256,71 +286,126 @@ const Settings = ({ open, onClose, initialTab = 0 }) => {
       maxWidth="lg"
       fullWidth
     >
-      <DialogTitle>Settings</DialogTitle>
+      <DialogTitle sx={(theme) => ({ 
+        display: 'flex', 
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: theme.palette.mode === 'dark' 
+          ? alpha(theme.palette.primary.dark, 0.15)
+          : alpha(theme.palette.primary.light, 0.15),
+      })}>
+        <Box component="div" sx={{ typography: 'h6' }}>Settings</Box>
+        <IconButton
+          edge="end"
+          color="inherit"
+          onClick={handleClose}
+          aria-label="close"
+          size="small"
+        >
+          <CloseIcon />
+        </IconButton>
+      </DialogTitle>
       <DialogContent>
-        <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
-          <Tabs value={currentTab} onChange={handleTabChange}>
+        <Box sx={(theme) => ({ 
+          borderBottom: 1, 
+          borderColor: 'divider',
+          backgroundColor: theme.palette.mode === 'dark' 
+            ? alpha(theme.palette.primary.dark, 0.15)
+            : alpha(theme.palette.primary.light, 0.15),
+          position: 'sticky',
+          top: 0,
+          zIndex: 1,
+          px: 2
+        })}>
+          <Tabs 
+            value={currentTab} 
+            onChange={handleTabChange}
+            sx={{
+              minHeight: 40,
+              '& .MuiTab-root': {
+                minHeight: 40,
+                py: 0.5
+              }
+            }}
+          >
             <Tab label="General" value={0} />
             <Tab label="Whisper Setup" value={1} />
             <Tab label="AI Service" value={2} />
           </Tabs>
         </Box>
 
-        <TabPanel value={currentTab} index={0}>
-          <GeneralSettings
-            darkMode={false}
-            notifications={true}
-            autoStart={false}
-            onDarkModeChange={() => {}}
-            onNotificationsChange={() => {}}
-            onAutoStartChange={() => {}}
-          />
-        </TabPanel>
+        <Box sx={{ height: 'calc(100% - 41px)' }}>
+          <TabPanel value={currentTab} index={0}>
+            {generalSettings && (
+              <GeneralSettings 
+                settings={generalSettings}
+                onSettingsChange={handleSettingsChange}
+              />
+            )}
+          </TabPanel>
 
-        <TabPanel value={currentTab} index={1}>
-          <Box>
-            <ModelSettings
-              modelConfig={modelConfig}
-              updateModelConfig={updateModelConfig}
-              isModelLoaded={isModelLoaded}
-              whisperLoading={whisperLoading}
-              whisperError={whisperError}
-              loadingProgress={loadingProgress}
-              loadingStage={loadingStage}
-              onLoadModel={handleLoadWhisperModel}
-              onResetSetup={handleResetSetup}
-            />
-            {isModelLoaded && (
-              <>
-                <Box sx={{ mt: 3 }}>
+          <TabPanel value={currentTab} index={1}>
+            <Box sx={{ 
+              display: 'grid', 
+              gridTemplateColumns: '1fr 1fr', 
+              gap: 3,
+              height: '100%'
+            }}>
+              <Box>
+                <ModelSettings
+                  modelConfig={modelConfig}
+                  updateModelConfig={updateModelConfig}
+                  isModelLoaded={isModelLoaded}
+                  whisperLoading={whisperLoading}
+                  whisperError={whisperError}
+                  loadingProgress={loadingProgress}
+                  loadingStage={loadingStage}
+                  onLoadModel={handleLoadWhisperModel}
+                  onResetSetup={handleResetSetup}
+                  autoLoadModel={autoLoadModel}
+                  onAutoLoadChange={handleAutoLoadChange}
+                />
+              </Box>
+              {isModelLoaded && (
+                <Box sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  height: '100%',
+                  borderLeft: 1,
+                  borderColor: 'divider',
+                  pl: 3
+                }}>
                   <AudioSettings
                     isRecording={isRecording}
                     isProcessing={isProcessing}
                     selectedLanguage={selectedLanguage}
-                    onLanguageChange={setSelectedLanguage}
+                    onLanguageChange={updateLanguage}
                     onStartRecording={startRecording}
                     onStopRecording={stopRecording}
                     transcriptionResult={transcriptionResult}
                   />
                 </Box>
-                <Box sx={{ mt: 3 }}>
-                  <AutoLoadSettings
-                    autoLoadModel={autoLoadModel}
-                    onAutoLoadChange={handleAutoLoadChange}
-                  />
-                </Box>
-              </>
-            )}
-          </Box>
-        </TabPanel>
+              )}
+            </Box>
+          </TabPanel>
 
-        <TabPanel value={currentTab} index={2}>
-          <AIServiceSettings />
-        </TabPanel>
+          <TabPanel value={currentTab} index={2}>
+            <AIServiceSettings />
+          </TabPanel>
+        </Box>
       </DialogContent>
       <DialogActions>
-        <Button onClick={handleClose}>Cancel</Button>
-        <Button onClick={handleSave} variant="contained">
+        <Button 
+          onClick={handleSave} 
+          variant="contained" 
+          color="primary" 
+          size="medium"
+          sx={{ 
+            px: 4,
+            py: 0.75,
+            fontSize: '0.95rem'
+          }}
+        >
           Save
         </Button>
       </DialogActions>
