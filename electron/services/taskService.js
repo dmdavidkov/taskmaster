@@ -9,11 +9,10 @@ class TaskService {
     constructor() {
         this.checkTimer = null;
         this.userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        log.info('TaskService initialized');
     }
 
     showNotification(title, body, taskId) {
-        log.info('Showing notification:', { title, body, taskId });
+        log.info(`Showing notification for task: ${taskId}`);
         
         // Check notification settings
         const settings = store.get('settings');
@@ -134,11 +133,6 @@ class TaskService {
         
         const delay = nextMinute.getTime() - now.getTime();
         
-        // Only log if debug logging is enabled
-        if (process.env.NODE_ENV === 'development') {
-            log.info('Scheduling next check at:', nextMinute.toISOString());
-        }
-        
         this.checkTimer = setTimeout(() => {
             this.checkTasks();
             this.scheduleNextMinuteCheck();
@@ -146,7 +140,7 @@ class TaskService {
     }
 
     startTaskChecking() {
-        log.info('Starting task checking service');
+        log.info('Task checking service started');
         // Run an immediate check
         this.checkTasks();
         // Then schedule next checks
@@ -155,7 +149,7 @@ class TaskService {
 
     stopTaskChecking() {
         if (this.checkTimer) {
-            log.info('Stopping task checking service');
+            log.info('Task checking service stopped');
             clearTimeout(this.checkTimer);
             this.checkTimer = null;
         }

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Tray, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Tray, Menu, globalShortcut } = require('electron');
 const path = require('path');
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
@@ -180,6 +180,14 @@ function initializeIpcHandlers() {
     }
   });
 
+  // Speech recognition trigger handler
+  ipcMain.handle('trigger-speech-recognition', () => {
+    if (mainWindow) {
+      mainWindow.show();
+      mainWindow.webContents.send('start-speech-recognition');
+    }
+  });
+
   // Handle notification clicks
   ipcMain.on('notification-clicked', (_, taskId) => {
     log.info('Handling notification click for task:', taskId);
@@ -293,6 +301,19 @@ function createTray() {
     {
       label: 'Exit',
       click: () => {
+        // Stop any running services
+        if (taskService) {
+          taskService.stopTaskChecking();
+        }
+        // Destroy the tray icon
+        if (tray) {
+          tray.destroy();
+        }
+        // Close the main window if it exists
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.destroy();
+        }
+        // Quit the application
         app.quit();
       }
     }
@@ -475,10 +496,10 @@ app.whenReady().then(async () => {
   taskService.startTaskChecking();
   
   // Test notification system on startup
-  setTimeout(() => {
-    log.info('Testing notification system on startup');
-    taskService.testNotification();
-  }, 5000); // Wait 5 seconds after startup
+  // setTimeout(() => {
+  //   log.info('Testing notification system on startup');
+  //   taskService.testNotification();
+  // }, 5000); // Wait 5 seconds after startup
   
   if (app.isPackaged) {
     // Auto-updater configuration
@@ -573,6 +594,24 @@ app.whenReady().then(async () => {
       }
     }, 24 * 60 * 60 * 1000); // Check once per day
   }
+  
+  // Register global shortcut (Ctrl+Shift+Space)
+  globalShortcut.register('CommandOrControl+Shift+Space', () => {
+    if (mainWindow) {
+      mainWindow.webContents.executeJavaScript(`
+        window.dispatchEvent(new Event('start-speech-recognition'));
+      `);
+      if (!mainWindow.isVisible()) {
+        mainWindow.show();
+      }
+      mainWindow.focus();
+    }
+  });
+});
+
+// Unregister shortcuts when app is quitting
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
 });
 
 // Quit when all windows are closed.

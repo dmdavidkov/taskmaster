@@ -1,41 +1,39 @@
-import React, { useEffect } from 'react';
+import React, { useState } from 'react';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import MinimizeIcon from '@mui/icons-material/Remove';
 import MaximizeIcon from '@mui/icons-material/CropSquare';
 import CloseIcon from '@mui/icons-material/Close';
-import DarkModeIcon from '@mui/icons-material/DarkMode';
-import LightModeIcon from '@mui/icons-material/LightMode';
+import PaletteIcon from '@mui/icons-material/Palette';
+import Brightness4Icon from '@mui/icons-material/Brightness4';
+import Brightness7Icon from '@mui/icons-material/Brightness7';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
+import ListItemText from '@mui/material/ListItemText';
+import ListItemIcon from '@mui/material/ListItemIcon';
 import { alpha } from '@mui/material/styles';
-import { useMediaQuery } from '@mui/material';
+import useThemeStore from '../stores/themeStore';
 
-const TitleBar = ({ darkMode, onThemeToggle }) => {
-  const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
+const TitleBar = () => {
+  const { theme, isDarkMode, setTheme, availableThemes } = useThemeStore();
+  const [anchorEl, setAnchorEl] = useState(null);
 
   const handleWindowControl = (command) => {
     window.electron.window[command]();
   };
 
-  const handleThemeToggle = () => {
-    // Get current settings first
-    window.electron.settings.get().then(settings => {
-      // Determine the new theme value
-      let newTheme;
-      if (settings.theme === 'system') {
-        // If currently using system theme, switch to explicit light/dark
-        newTheme = darkMode ? 'light' : 'dark';
-      } else {
-        // If using explicit theme, toggle between light/dark
-        newTheme = settings.theme === 'dark' ? 'light' : 'dark';
-      }
+  const handleThemeMenuOpen = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
 
-      // Update settings store
-      window.electron.settings.setTheme(newTheme).then(() => {
-        // Call the original theme toggle handler
-        onThemeToggle();
-      });
-    });
+  const handleThemeMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleThemeSelect = (themeId) => {
+    setTheme(themeId);
+    handleThemeMenuClose();
   };
 
   return (
@@ -43,87 +41,118 @@ const TitleBar = ({ darkMode, onThemeToggle }) => {
       sx={{
         WebkitAppRegion: 'drag',
         height: '32px',
-        backgroundColor: 'background.paper',
+        bgcolor: (theme) => alpha(theme.palette.background.paper, 0.7),
+        backdropFilter: 'blur(8px)',
         display: 'flex',
-        justifyContent: 'space-between',
         alignItems: 'center',
-        pl: 2,
-        pr: 1,
-        borderBottom: 1,
-        borderColor: (theme) => alpha(theme.palette.divider, 0.1),
-        position: 'relative',
-        zIndex: 1100,
+        justifyContent: 'space-between',
+        px: 1,
+        borderBottom: '1px solid',
+        borderColor: 'divider',
       }}
     >
       <Typography
         variant="subtitle2"
-        component="div"
         sx={{
-          fontWeight: 500,
-          color: 'text.secondary',
-          fontSize: '0.75rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
         }}
       >
         TaskMaster
       </Typography>
 
       <Box sx={{ 
-        WebkitAppRegion: 'no-drag',
         display: 'flex',
         alignItems: 'center',
         gap: 0.5,
+        WebkitAppRegion: 'no-drag',
       }}>
         <IconButton
           size="small"
-          onClick={handleThemeToggle}
+          onClick={handleThemeMenuOpen}
           sx={{ 
-            fontSize: '1rem',
+            fontSize: '1.2rem',
             '&:hover': {
               backgroundColor: 'action.hover',
+            },
+          }}
+        >
+          <PaletteIcon fontSize="inherit" />
+        </IconButton>
+
+        <Menu
+          anchorEl={anchorEl}
+          open={Boolean(anchorEl)}
+          onClose={handleThemeMenuClose}
+          PaperProps={{
+            sx: {
+              mt: 1,
+              minWidth: 180,
             }
           }}
         >
-          {darkMode ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
-        </IconButton>
+          <MenuItem 
+            selected={theme === 'system'}
+            onClick={() => handleThemeSelect('system')}
+          >
+            <ListItemIcon>
+              {isDarkMode ? <Brightness4Icon /> : <Brightness7Icon />}
+            </ListItemIcon>
+            <ListItemText>System</ListItemText>
+          </MenuItem>
+          {availableThemes.map(({ id, name }) => (
+            <MenuItem
+              key={id}
+              selected={theme === id}
+              onClick={() => handleThemeSelect(id)}
+            >
+              <ListItemIcon>
+                <PaletteIcon />
+              </ListItemIcon>
+              <ListItemText>{name}</ListItemText>
+            </MenuItem>
+          ))}
+        </Menu>
 
         <IconButton
           size="small"
           onClick={() => handleWindowControl('minimize')}
-          sx={{
-            fontSize: '1rem',
+          sx={{ 
+            fontSize: '1.2rem',
             '&:hover': {
               backgroundColor: 'action.hover',
-            }
+            },
           }}
         >
-          <MinimizeIcon fontSize="small" />
+          <MinimizeIcon fontSize="inherit" />
         </IconButton>
 
         <IconButton
           size="small"
           onClick={() => handleWindowControl('maximize')}
-          sx={{
-            fontSize: '1rem',
+          sx={{ 
+            fontSize: '1.2rem',
             '&:hover': {
               backgroundColor: 'action.hover',
-            }
+            },
           }}
         >
-          <MaximizeIcon fontSize="small" />
+          <MaximizeIcon fontSize="inherit" />
         </IconButton>
 
         <IconButton
           size="small"
           onClick={() => handleWindowControl('close')}
-          sx={{
-            fontSize: '1rem',
+          sx={{ 
+            fontSize: '1.2rem',
             '&:hover': {
               backgroundColor: 'error.main',
               color: 'error.contrastText',
-            }
+            },
           }}
         >
-          <CloseIcon fontSize="small" />
+          <CloseIcon fontSize="inherit" />
         </IconButton>
       </Box>
     </Box>

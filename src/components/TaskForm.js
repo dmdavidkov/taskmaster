@@ -246,7 +246,8 @@ const TaskForm = ({
     createdDate: null,
     completedDate: null,
     speechText: '',
-    language: 'en'
+    language: 'en',
+    notified: false
   });
 
   const [errors, setErrors] = useState({});
@@ -310,7 +311,8 @@ const TaskForm = ({
         createdDate: task.createdDate ? utcToZonedTime(new Date(task.createdDate), userTimezone) : null,
         completedDate: task.completedDate ? utcToZonedTime(new Date(task.completedDate), userTimezone) : null,
         speechText: task.metadata?.speechText || '',
-        language: task.metadata?.language || 'en'
+        language: task.metadata?.language || 'en',
+        notified: task.notified || false
       };
       // console.log('Setting form data from task:', newFormData);
       setFormData(newFormData);
@@ -323,7 +325,8 @@ const TaskForm = ({
         createdDate: zonedTimeToUtc(new Date(), userTimezone),
         completedDate: null,
         speechText: '',
-        language: 'en'
+        language: 'en',
+        notified: false
       };
       console.log('Setting initial form data:', newFormData);
       setFormData(newFormData);
@@ -343,7 +346,8 @@ const TaskForm = ({
   const handleDateChange = (newValue) => {
     setFormData(prev => ({
       ...prev,
-      dueDate: newValue
+      dueDate: newValue,
+      notified: false
     }));
   };
 
@@ -385,6 +389,7 @@ const TaskForm = ({
       dueDate: formData.dueDate.toISOString(),
       createdDate: formData.createdDate ? formData.createdDate.toISOString() : null,
       completedDate: formData.completedDate ? formData.completedDate.toISOString() : null,
+      notified: formData.notified,
       metadata: {
         speechText: formData.speechText,
         language: formData.language

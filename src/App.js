@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ThemeProvider, createTheme, useTheme } from '@mui/material/styles';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
@@ -26,6 +26,7 @@ import { bg } from 'date-fns/locale';
 import { initializeApp } from './init';
 import Tooltip from '@mui/material/Tooltip';
 import IconButton from '@mui/material/IconButton';
+import useThemeStore from './stores/themeStore';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -80,10 +81,7 @@ class ErrorBoundary extends React.Component {
 }
 
 function App() {
-  const [darkMode, setDarkMode] = useState(() => {
-    const stored = localStorage.getItem('darkMode');
-    return stored ? JSON.parse(stored) : window.matchMedia('(prefers-color-scheme: dark)').matches;
-  });
+  const { isDarkMode, muiTheme, initializeTheme } = useThemeStore();
   
   const [selectedTask, setSelectedTask] = useState(null);
   const [selectedTab, setSelectedTab] = useState(() => {
@@ -103,8 +101,9 @@ function App() {
   const { tasks, loading, createTask, updateTask, deleteTask, toggleTaskCompletion } = useTaskStore();
 
   useEffect(() => {
-    // Initialize app when component mounts
+    // Initialize app and theme when component mounts
     initializeApp();
+    initializeTheme();
 
     // Listen for show-task events from notifications
     window.electron?.onShowTask((taskId) => {
@@ -114,29 +113,15 @@ function App() {
         setDrawerOpen(true);
       }
     });
-
-    // Listen for theme changes from settings
-    const handleThemeChange = (event) => {
-      if (event.detail && typeof event.detail.darkMode === 'boolean') {
-        setDarkMode(event.detail.darkMode);
-      }
-    };
-    window.addEventListener('themeChange', handleThemeChange);
-    return () => window.removeEventListener('themeChange', handleThemeChange);
-  }, [tasks]); // Re-run when tasks change to ensure we have latest task list
+  }, [tasks, initializeTheme]); // Re-run when tasks or initializeTheme changes
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleChange = (e) => {
-      setDarkMode(e.matches);
+      // Removed this effect as it's now handled by the theme store
     };
-    mediaQuery.addEventListener('change', handleChange);
-    return () => mediaQuery.removeEventListener('change', handleChange);
+    // Removed the event listener as it's now handled by the theme store
   }, []);
-
-  useEffect(() => {
-    localStorage.setItem('darkMode', JSON.stringify(darkMode));
-  }, [darkMode]);
 
   useEffect(() => {
     localStorage.setItem('selectedTab', JSON.stringify(selectedTab));
@@ -149,58 +134,6 @@ function App() {
   useEffect(() => {
     localStorage.setItem('compactView', JSON.stringify(compactView));
   }, [compactView]);
-
-  const theme = createTheme({
-    palette: {
-      mode: darkMode ? 'dark' : 'light',
-      primary: {
-        main: '#2196f3',
-      },
-      secondary: {
-        main: '#f50057',
-      },
-      background: {
-        default: darkMode ? '#121212' : '#f5f5f5',
-        paper: darkMode ? '#1e1e1e' : '#ffffff',
-      },
-    },
-    typography: {
-      fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
-      h1: { fontWeight: 700 },
-      h2: { fontWeight: 600 },
-      h3: { fontWeight: 600 },
-      h4: { fontWeight: 600 },
-      h5: { fontWeight: 600 },
-      h6: { fontWeight: 600 },
-    },
-    shape: {
-      borderRadius: 12,
-    },
-    components: {
-      MuiButton: {
-        styleOverrides: {
-          root: {
-            textTransform: 'none',
-            borderRadius: 8,
-          },
-        },
-      },
-      MuiPaper: {
-        styleOverrides: {
-          root: {
-            backgroundImage: 'none',
-          },
-        },
-      },
-      MuiDrawer: {
-        styleOverrides: {
-          paper: {
-            borderRight: 0,
-          },
-        },
-      },
-    },
-  });
 
   const handleTaskAction = async (actionFn, ...args) => {
     try {
@@ -269,7 +202,7 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <ThemeProvider theme={theme}>
+      <ThemeProvider theme={muiTheme}>
         <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={bg}>
           <CssBaseline />
           
@@ -281,8 +214,8 @@ function App() {
             overflow: 'hidden',
           }}>
             <TitleBar 
-              darkMode={darkMode} 
-              onThemeToggle={() => setDarkMode(!darkMode)} 
+              darkMode={isDarkMode} 
+              onThemeToggle={() => { /* Removed this prop as it's now handled by the theme store */ }}
             />
             
             <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>

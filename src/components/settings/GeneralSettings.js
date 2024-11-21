@@ -10,35 +10,16 @@ import {
   MenuItem,
   useMediaQuery,
 } from '@mui/material';
-
-const GENERAL_SETTINGS = {
-  themes: [
-    { value: 'light', label: 'Light' },
-    { value: 'dark', label: 'Dark' },
-    { value: 'system', label: 'System' }
-  ],
-  notifications: [
-    { value: 'all', label: 'All Notifications' },
-    { value: 'important', label: 'Important Only' },
-    { value: 'none', label: 'None' }
-  ]
-};
+import useThemeStore from '../../stores/themeStore';
 
 const GeneralSettings = ({ settings: initialSettings, onSettingsChange }) => {
+  const { theme, setTheme, availableThemes } = useThemeStore();
   const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
 
   const handleThemeChange = (value) => {
-    const isDark = value === 'system' ? prefersDarkMode : value === 'dark';
-    
-    window.electron.settings.setTheme(value).then(() => {
-      const newSettings = { ...initialSettings, theme: value };
-      onSettingsChange(newSettings);
-      
-      localStorage.setItem('darkMode', JSON.stringify(isDark));
-      window.dispatchEvent(new CustomEvent('themeChange', { 
-        detail: { darkMode: isDark }
-      }));
-    });
+    setTheme(value);
+    const newSettings = { ...initialSettings, theme: value };
+    onSettingsChange(newSettings);
   };
 
   const handleNotificationsChange = (value) => {
@@ -69,18 +50,21 @@ const GeneralSettings = ({ settings: initialSettings, onSettingsChange }) => {
       <FormControl fullWidth>
         <InputLabel>Theme</InputLabel>
         <Select
-          value={initialSettings.theme}
+          value={theme}
           onChange={(e) => handleThemeChange(e.target.value)}
           label="Theme"
         >
-          {GENERAL_SETTINGS.themes.map((option) => (
-            <MenuItem key={option.value} value={option.value}>
-              {option.label}
-              {option.value === 'system' && (
-                <Typography variant="caption" color="textSecondary" sx={{ ml: 1 }}>
-                  (Currently {prefersDarkMode ? 'Dark' : 'Light'})
-                </Typography>
-              )}
+          <MenuItem value="system">
+            System
+            {theme === 'system' && (
+              <Typography variant="caption" color="textSecondary" sx={{ ml: 1 }}>
+                (Currently {prefersDarkMode ? 'Dark' : 'Light'})
+              </Typography>
+            )}
+          </MenuItem>
+          {availableThemes.map(({ id, name }) => (
+            <MenuItem key={id} value={id}>
+              {name}
             </MenuItem>
           ))}
         </Select>
@@ -93,11 +77,9 @@ const GeneralSettings = ({ settings: initialSettings, onSettingsChange }) => {
           onChange={(e) => handleNotificationsChange(e.target.value)}
           label="Notifications"
         >
-          {GENERAL_SETTINGS.notifications.map((option) => (
-            <MenuItem key={option.value} value={option.value}>
-              {option.label}
-            </MenuItem>
-          ))}
+          <MenuItem value="all">All Notifications</MenuItem>
+          <MenuItem value="important">Important Only</MenuItem>
+          <MenuItem value="none">None</MenuItem>
         </Select>
       </FormControl>
 

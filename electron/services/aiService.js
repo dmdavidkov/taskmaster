@@ -161,7 +161,7 @@ class AIService {
 
             // Prepare the system message
             const systemMessage = this.getSystemMessage(language);
-            
+            log.info('System message:', systemMessage);
             const completion = await this.client.chat.completions.create({
                 model: this.modelName,
                 messages: [
@@ -240,7 +240,6 @@ class AIService {
         return `You are a multilingual task extraction assistant. Extract task information from user input and return it in JSON format.
         Current local time: ${new Date().toLocaleString()}
         Local ISO time: ${new Date().toISOString()}
-        Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone} (UTC${-new Date().getTimezoneOffset()/60})
         
         Return ONLY JSON in this format, with no additional text:
         {
@@ -264,8 +263,6 @@ class AIService {
         - Title should be actionable and natural in the target language
         - Description should include context and details not in the title
         - Convert relative dates (tomorrow, next week) to actual dates using the current local time
-        - For "in X minutes" requests, add exactly X minutes to ${new Date().toLocaleTimeString()}
-        - Return dates in ISO format but calculate them based on local time ${new Date().toLocaleString()}
         - Infer priority from urgency words and context in the given language
         - Preserve any language-specific formatting or special characters`;
     }

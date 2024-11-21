@@ -171,7 +171,26 @@ const Sidebar = ({
     if (window.electron?.app) {
       window.electron.app.getVersion().then(setVersion).catch(console.error);
     }
-  }, []);
+
+    // Listen for global shortcut trigger
+    const handleSpeechTrigger = () => {
+      if (!isWhisperReady) {
+        showNotification('Please wait for the speech recognition model to load.', 'info');
+        return;
+      }
+      setIsVoiceDialogOpen(true);
+    };
+
+    // Add event listener for speech recognition trigger
+    const eventHandler = (e) => {
+      handleSpeechTrigger();
+    };
+    window.addEventListener('start-speech-recognition', eventHandler);
+
+    return () => {
+      window.removeEventListener('start-speech-recognition', eventHandler);
+    };
+  }, [isWhisperReady]);
 
   return (
     <>

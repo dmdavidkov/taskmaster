@@ -29,9 +29,12 @@ const StyledDialog = styled(Dialog)(({ theme }) => ({
     height: '80vh',
     maxHeight: '900px',
     minHeight: '600px',
-    backgroundColor: theme.palette.background.paper,
+    backgroundColor: theme.palette.mode === 'dark' 
+      ? theme.palette.background.paper
+      : theme.palette.background.paper,
     display: 'flex',
     flexDirection: 'column',
+    borderRadius: theme.shape.borderRadius * 2,
     [theme.breakpoints.down('sm')]: {
       width: '95vw',
       minWidth: 'auto',
@@ -42,6 +45,9 @@ const StyledDialog = styled(Dialog)(({ theme }) => ({
   },
   '& .MuiDialogTitle-root': {
     padding: theme.spacing(2, 3),
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     borderBottom: `1px solid ${theme.palette.divider}`,
     backgroundColor: theme.palette.mode === 'dark' 
       ? alpha(theme.palette.primary.dark, 0.15)
@@ -51,6 +57,9 @@ const StyledDialog = styled(Dialog)(({ theme }) => ({
     flex: 1,
     overflowY: 'auto',
     padding: 0,
+    backgroundColor: theme.palette.mode === 'dark'
+      ? theme.palette.background.paper
+      : theme.palette.background.paper,
     '&::-webkit-scrollbar': {
       width: '8px',
       backgroundColor: 'transparent',
