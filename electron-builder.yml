@@ -27,6 +27,8 @@ extraResources:
     to: "app.asar.unpacked/node_modules/electron-store"
   - from: "node_modules/electron-log"
     to: "app.asar.unpacked/node_modules/electron-log"
+  - from: "assets/icon.png"
+    to: "assets/icon.png"
 electronUpdaterCompatibility: ">=2.16"
 win:
   target: 

@@ -87,11 +87,26 @@ function initializeIpcHandlers() {
         }
         break;
       case 'close':
-        mainWindow.close();
+        const settings = settingsService.getSettings();
+        const shouldMinimizeToTray = settings?.minimizeToTray;
+        
+        if (shouldMinimizeToTray) {
+          minimizeToTray();
+          // Ensure tray exists
+          if (!tray) {
+            createTray();
+          }
+        } else {
+          mainWindow.close();
+        }
         break;
       case 'minimize-to-tray':
         minimizeToTray();
-        break
+        // Ensure tray exists
+        if (!tray) {
+          createTray();
+        }
+        break;
     }
   });
 
@@ -286,47 +301,61 @@ function checkTaskDueDates() {
 function createTray() {
   if (tray) return; // Prevent multiple tray instances
 
-  const iconPath = path.join(__dirname, '../assets/icon.png');
-  tray = new Tray(iconPath);
-  
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: 'Show App',
-      click: () => {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.show();
+  let iconPath;
+  if (app.isPackaged) {
+    // In production, use the extraResources path
+    iconPath = path.join(process.resourcesPath, 'assets/icon.png');
+  } else {
+    // In development, use the relative path
+    iconPath = path.join(__dirname, '../assets/icon.png');
+  }
+
+  try {
+    tray = new Tray(iconPath);
+    
+    const contextMenu = Menu.buildFromTemplate([
+      {
+        label: 'Show App',
+        click: () => {
+          if (mainWindow) {
+            mainWindow.show();
+          }
+        }
+      },
+      {
+        label: 'Exit',
+        click: () => {
+          // Stop any running services
+          if (taskService) {
+            taskService.stopTaskChecking();
+          }
+          // Destroy the tray icon
+          if (tray) {
+            tray.destroy();
+          }
+          // Close the main window if it exists
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.destroy();
+          }
+          // Quit the application
+          app.quit();
         }
       }
-    },
-    {
-      label: 'Exit',
-      click: () => {
-        // Stop any running services
-        if (taskService) {
-          taskService.stopTaskChecking();
-        }
-        // Destroy the tray icon
-        if (tray) {
-          tray.destroy();
-        }
-        // Close the main window if it exists
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.destroy();
-        }
-        // Quit the application
-        app.quit();
+    ]);
+
+    tray.setToolTip('Task Master');
+    tray.setContextMenu(contextMenu);
+
+    tray.on('click', () => {
+      if (mainWindow) {
+        mainWindow.show();
       }
-    }
-  ]);
-
-  tray.setToolTip('Task Master');
-  tray.setContextMenu(contextMenu);
-
-  tray.on('click', () => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.show();
-    }
-  });
+    });
+  } catch (error) {
+    console.error('Failed to create tray:', error);
+    // Log the attempted icon path
+    console.error('Attempted icon path:', iconPath);
+  }
 }
 
 function minimizeToTray() {
@@ -619,12 +648,22 @@ app.on('window-all-closed', () => {
   // Stop task checking service
   taskService.stopTaskChecking();
   
-  if (process.platform !== 'darwin') {
+  // Get minimize to tray setting
+  const settings = settingsService.getSettings();
+  const minimizeToTray = settings?.minimizeToTray;
+  
+  // On Windows/Linux, if minimize to tray is disabled, quit the app
+  if (process.platform !== 'darwin' && !minimizeToTray) {
     if (tray) {
       tray.destroy();
       tray = null;
     }
     app.quit();
+  } else {
+    // If minimize to tray is enabled, ensure tray exists
+    if (!tray) {
+      createTray();
+    }
   }
 });
 
