@@ -32,6 +32,39 @@ A beautiful and responsive task management application built with Electron and R
 - Fast and efficient
 - Auto-updates support
 - Voice-to-Text with Whisper AI model
+- Smart task creation with AI assistance
+
+## AI-Powered Task Management
+
+TaskMaster now features intelligent task creation using AI services. This powerful integration allows you to:
+- Convert speech into a task and task description
+- Smartly set priority and due dates
+- Support multiple languages for task creation
+
+### Setting Up AI Services
+
+1. Go to Settings (bottom left corner)
+2. Navigate to the "AI Services" tab
+3. Configure your AI settings:
+   - Enter your API key 
+   - Set the base URL for your AI service 
+   - Choose your preferred model
+4. Save your settings
+
+> **Note**: The application comes pre-configured to use Nebius AI Studio, but you can use any OpenAI-compatible API service by changing the base URL. Nebius studio provides $100 free credit on registration currently.
+
+### Using Smart Task Creation
+
+1. When creating a new task:
+   - Click the microphone icon (🎤) next to the "+ Add Task" button on the main form
+2. Voice input:
+   - Speak your task details clearly
+   - Click the stop button when finished
+   - The Whisper model will transcribe your speech
+3. The AI service will process your input and return a new task
+
+
+> **Tip**: You can view the original transcribed text alongside the AI-processed version by hovering on the translation icon.
 
 ## Voice-to-Text with Whisper
 
