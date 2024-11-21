@@ -164,55 +164,6 @@ const themes = {
     },
   }),
 
-
-  ocean: createTheme({
-    name: 'Ocean Breeze',
-    palette: {
-      mode: 'light',
-      primary: {
-        main: '#006064',
-        light: '#0097a7',
-        dark: '#00363a',
-      },
-      secondary: {
-        main: '#80deea',
-        light: '#b4ffff',
-        dark: '#4bacb8',
-      },
-      background: {
-        default: '#e0f7fa',
-        paper: '#ffffff',
-      },
-    },
-    shape: {
-      borderRadius: 8,
-    },
-  }),
-
-  sunset: createTheme({
-    name: 'Sunset',
-    palette: {
-      mode: 'dark',
-      primary: {
-        main: '#ff5722',
-        light: '#ff8a50',
-        dark: '#c41c00',
-      },
-      secondary: {
-        main: '#ffb74d',
-        light: '#ffe97d',
-        dark: '#c88719',
-      },
-      background: {
-        default: '#1a0f0f',
-        paper: '#2d1c1c',
-      },
-    },
-    shape: {
-      borderRadius: 8,
-    },
-  }),
-
   dreamscape: createTheme({
     name: 'Dreamscape',
     palette: {
@@ -300,32 +251,6 @@ const themes = {
           },
         },
       },
-    },
-  }),
- 
-
-
-  forest: createTheme({
-    name: 'Forest',
-    palette: {
-      mode: 'light',
-      primary: {
-        main: '#2e7d32',
-        light: '#4caf50',
-        dark: '#1b5e20',
-      },
-      secondary: {
-        main: '#81c784',
-        light: '#b2fab4',
-        dark: '#519657',
-      },
-      background: {
-        default: '#f1f8e9',
-        paper: '#ffffff',
-      },
-    },
-    shape: {
-      borderRadius: 8,
     },
   }),
 };
