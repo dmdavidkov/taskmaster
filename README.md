@@ -34,38 +34,6 @@ A beautiful and responsive task management application built with Electron and R
 - Voice-to-Text with Whisper AI model
 - Smart task creation with AI assistance
 
-## AI-Powered Task Management
-
-TaskMaster now features intelligent task creation using AI services. This powerful integration allows you to:
-- Convert speech into a task and task description
-- Smartly set priority and due dates
-- Support multiple languages for task creation
-
-### Setting Up AI Services
-
-1. Go to Settings (bottom left corner)
-2. Navigate to the "AI Services" tab
-3. Configure your AI settings:
-   - Enter your API key 
-   - Set the base URL for your AI service 
-   - Choose your preferred model
-4. Save your settings
-
-> **Note**: The application comes pre-configured to use Nebius AI Studio, but you can use any OpenAI-compatible API service by changing the base URL. Nebius studio provides $100 free credit on registration currently.
-
-### Using Smart Task Creation
-
-1. When creating a new task:
-   - Click the microphone icon (🎤) next to the "+ Add Task" button on the main form
-2. Voice input:
-   - Speak your task details clearly
-   - Click the stop button when finished
-   - The Whisper model will transcribe your speech
-3. The AI service will process your input and return a new task
-
-
-> **Tip**: You can view the original transcribed text alongside the AI-processed version by hovering on the translation icon.
-
 ## Voice-to-Text with Whisper
 
 TaskMaster integrates the Whisper large-v3-turbo model for powerful voice-to-text capabilities. This feature allows you to dictate your tasks using your voice, making task creation faster and more convenient.
@@ -84,21 +52,46 @@ TaskMaster integrates the Whisper large-v3-turbo model for powerful voice-to-tex
 5. Click "Test Speech Recognition" to test the voice-to-text functionality
    > If the model is loaded and the test works, you can now use voice input to create tasks
 
-### Using Voice Input
-
-1. When creating or editing a task, look for the microphone icon (🎤) next to text fields
-2. Click the microphone icon to start recording
-3. Speak clearly into your microphone
-4. Click the stop icon (⏹️) to end recording
-5. The Whisper model will process your speech and convert it to text
-6. Review and edit the transcribed text if needed
-
 ### Performance Considerations
 
-- The model runs locally in your browser using WebGPU acceleration
+- The whisper model runs locally in your browser using WebGPU acceleration
 - First-time initialization requires downloading the model
 - Transcription works offline once the model is loaded
 - Processing time varies based on the length of the recording and the hardware capabilities of your device
+
+## AI-Powered Task Management
+
+TaskMaster now features intelligent task creation using AI services. This powerful integration allows you to:
+- Convert speech into a task and task description
+- Smartly set priority and due dates
+- Support multiple languages for task creation
+
+### Setting Up AI Services
+
+1. Go to Settings (bottom left corner)
+2. Navigate to the "AI Services" tab
+3. Configure your AI settings:
+   - Enter your API key 
+   - Set the base URL for your AI service 
+   - Choose your preferred model
+4. Save your settings
+
+> **Note**: The application comes pre-configured to use Nebius AI Studio, but you can use any OpenAI-compatible API service (including locally hosted with applications like Ollama or LMStudio) by changing the base URL, API key, and model. 
+
+### Using Smart Task Creation
+
+1. When creating a new task:
+   - Click the microphone icon (🎤) next to the "+ Add Task" button on the main form
+2. Voice input:
+   - Speak your task details clearly
+   - Click the stop button when finished
+   - The Whisper model will transcribe your speech
+3. The AI service will process your input and return a new task
+
+
+> **Tip**: You can view the original transcribed text alongside the AI-processed version by hovering on the translation icon.
+
+
 
 ## Installation
 
