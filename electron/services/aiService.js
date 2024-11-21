@@ -195,19 +195,25 @@ class AIService {
 
             // Process the due date to ensure correct timezone
             if (parsedResult.dueDate) {
-                // Create date object from the AI response and keep it in UTC
-                const dueDate = new Date(parsedResult.dueDate);
+                // Parse the local time string into components
+                const [datePart, timePart] = parsedResult.dueDate.split('T');
+                const [year, month, day] = datePart.split('-').map(Number);
+                const [hours, minutes] = timePart.split(':').map(Number);
+                
+                // Create date in local time
+                const localDate = new Date(year, month - 1, day, hours, minutes);
                 
                 // Log timezone debugging information
                 log.info('Date processing:', {
                     original: parsedResult.dueDate,
-                    parsed: dueDate.toISOString(),
+                    localDate: localDate.toLocaleString(),
+                    utcDate: localDate.toISOString(),
                     tzOffset,
                     userTimezone
                 });
                 
-                // Keep the date in UTC format
-                parsedResult.dueDate = dueDate.toISOString();
+                // Store the UTC time
+                parsedResult.dueDate = localDate.toISOString();
             }
 
             const finalResult = {
@@ -239,13 +245,12 @@ class AIService {
     getSystemMessage(language) {
         return `You are a multilingual task extraction assistant. Extract task information from user input and return it in JSON format.
         Current local time: ${new Date().toLocaleString()}
-        Local ISO time: ${new Date().toISOString()}
         
         Return ONLY JSON in this format, with no additional text:
         {
             "title": "Task title",
             "description": "Task description",
-            "dueDate": "ISO date string",
+            "dueDate": "ISO date string in local time",
             "priority": "low|medium|high",
             "metadata": {
                 "confidence": 0.0-1.0,
@@ -262,9 +267,9 @@ class AIService {
         Follow these rules:
         - Title should be actionable and natural in the target language
         - Description should include context and details not in the title
-        - Convert relative dates (tomorrow, next week) to actual dates using the current local time
-        - Infer priority from urgency words and context in the given language
-        - Preserve any language-specific formatting or special characters`;
+        - When processing dates and times, use the current local time shown above
+        - Set dueDate based on the local time, not UTC
+        - Infer priority from urgency words and context in the given language`;
     }
 
     async testConnection(config) {
