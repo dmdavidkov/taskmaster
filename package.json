@@ -63,8 +63,9 @@
     "dist": "npm run build && electron-builder",
     "prebuild": "rimraf build",
     "make-win": "npm run build && npm run copy-electron && electron-builder -w",
-    "make-installer": "cross-env NODE_ENV=production npm run build && npm run copy-electron && electron-builder --win --x64 --config electron-builder.yml",
-    "copy-electron": "powershell Copy-Item electron/electron.js build/electron.js -Force; Copy-Item electron/preload.js build/preload.js -Force",
+    "clean": "rimraf build dist",
+    "make-installer": "npm run clean && cross-env NODE_ENV=production npm run build && npm run copy-electron && electron-builder --win --x64 --config electron-builder.yml",
+    "copy-electron": "powershell Copy-Item electron/electron.js build/electron.js -Force; Copy-Item electron/preload.js build/preload.js -Force; Copy-Item electron/services build/services -Recurse -Force",
     "postinstall": "electron-builder install-app-deps"
   },
   "build": {

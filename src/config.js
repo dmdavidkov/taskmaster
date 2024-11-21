@@ -1,12 +1,20 @@
 // Environment variables configuration
 const getEnvVariable = (key) => {
-    // Try different ways to access environment variables in Electron
-    const value = window?.electron?.env?.[key] ||   // From preload script
-                 window?.process?.env?.[key] ||      // Electron process
-                 process?.env?.[key];                // Node process
+    const isDev = window?.electron?.env?.NODE_ENV === 'development';
+    let value;
+
+    if (isDev) {
+        // In development, use environment variables
+        value = window?.electron?.env?.[key];
+    } else {
+        // In production, use electron store
+        if (key === 'REACT_APP_NEBIUS_API_KEY') {
+            value = window?.electron?.preferences?.get('apiKey');
+        }
+    }
     
     if (!value) {
-        console.warn(`Environment variable ${key} not found`);
+        console.warn(`Configuration value for ${key} not found`);
     }
     return value;
 };
@@ -15,7 +23,7 @@ const getEnvVariable = (key) => {
 export const config = {
     NEBIUS_API_KEY: getEnvVariable('REACT_APP_NEBIUS_API_KEY'),
     API_BASE_URL: 'https://api.studio.nebius.ai/v1/',
-    isDevelopment: process?.env?.NODE_ENV === 'development',
+    isDevelopment: window?.electron?.env?.NODE_ENV === 'development',
 };
 
 // Validate required configuration
@@ -24,9 +32,10 @@ const validateConfig = () => {
     const missing = required.filter(key => !config[key]);
     
     if (missing.length > 0) {
-        console.error(`Missing required configuration: ${missing.join(', ')}`);
         if (config.isDevelopment) {
-            console.info('Development environment detected. Make sure your .env file is properly configured.');
+            console.error('Development environment detected. Make sure your .env file is properly configured.');
+        } else {
+            console.error('Please configure the API key in the application settings.');
         }
     }
 };

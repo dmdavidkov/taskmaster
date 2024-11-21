@@ -5,12 +5,14 @@ const log = require('electron-log');
 const Store = require('electron-store');
 const store = new Store();
 
-// Initialize store defaults for AI service
-store.set('aiService', store.get('aiService', {
-  baseURL: 'https://api.studio.nebius.ai/v1/',
-  apiKey: '',
-  modelName: 'Qwen/Qwen2.5-72B-Instruct-fast'
-}));
+// Initialize store defaults for AI service if not already set
+if (!store.get('aiService')) {
+  store.set('aiService', {
+    baseURL: 'https://api.studio.nebius.ai/v1/',
+    apiKey: '',
+    modelName: 'Qwen/Qwen2.5-72B-Instruct-fast'
+  });
+}
 
 // Add store methods to window.webContents
 const initializePreferences = (window) => {
@@ -67,6 +69,7 @@ function createWindow() {
       v8CacheOptions: 'bypassHeatCheck',
       preload: path.join(__dirname, 'preload.js'),
       backgroundThrottling: true,
+      devTools: true, // Enable DevTools capability
     },
     backgroundColor: '#ffffff',
   });
@@ -127,6 +130,18 @@ function createWindow() {
     });
   }
 
+  // Add keyboard shortcut to toggle DevTools in any environment
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    // Ctrl+Shift+I (or Cmd+Shift+I on macOS) to toggle DevTools
+    if ((input.control || input.meta) && input.shift && input.key.toLowerCase() === 'i') {
+      if (mainWindow.webContents.isDevToolsOpened()) {
+        mainWindow.webContents.closeDevTools();
+      } else {
+        mainWindow.webContents.openDevTools();
+      }
+    }
+  });
+
   // Optimize memory usage
   mainWindow.on('minimize', () => {
     if (!isDev) {
@@ -145,8 +160,14 @@ app.whenReady().then(async () => {
   // Initialize AI service first
   try {
     aiService = require('./services/aiService');
-    await aiService.initialize();
-    log.info('AI Service initialized successfully');
+    // Only try to initialize if we have an API key
+    const config = store.get('aiService');
+    if (config && config.apiKey) {
+      await aiService.initialize();
+      log.info('AI Service initialized successfully');
+    } else {
+      log.info('AI Service initialization skipped - no API key configured');
+    }
   } catch (error) {
     log.error('Failed to initialize AI service:', error);
   }
@@ -345,6 +366,10 @@ ipcMain.handle('preferences:get', (event, key) => {
 
 ipcMain.handle('preferences:set', (event, key, value) => {
   store.set(`aiService.${key}`, value);
+});
+
+ipcMain.handle('preferences:getAll', () => {
+  return store.get('aiService');
 });
 
 // Window control handlers

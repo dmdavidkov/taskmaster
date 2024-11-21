@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('electron', {
   },
   env: {
     REACT_APP_NEBIUS_API_KEY: process.env.REACT_APP_NEBIUS_API_KEY,
+    NODE_ENV: process.env.NODE_ENV || 'production'
   },
   ai: {
     processText: (params) => ipcRenderer.invoke('ai:processText', params),
@@ -47,7 +48,8 @@ contextBridge.exposeInMainWorld('electron', {
   },
   preferences: {
     get: (key) => ipcRenderer.invoke('preferences:get', key),
-    set: (key, value) => ipcRenderer.invoke('preferences:set', key, value)
+    set: (key, value) => ipcRenderer.invoke('preferences:set', key, value),
+    getAll: () => ipcRenderer.invoke('preferences:getAll'),
   },
   window: {
     minimize: () => ipcRenderer.invoke('window-control', 'minimize'),

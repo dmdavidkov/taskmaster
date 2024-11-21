@@ -299,11 +299,6 @@ class AIService {
 // Create a single instance
 const aiService = new AIService();
 
-// Initialize service before setting up IPC handlers
-aiService.initialize().catch(error => {
-    log.error('Failed to initialize AI service:', error);
-});
-
 // Handle IPC calls
 ipcMain.handle('ai:processText', async (event, { text, language }) => {
     try {
