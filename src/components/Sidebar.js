@@ -110,8 +110,6 @@ const Sidebar = ({
     selectedLanguage 
   } = useWhisperStore();
 
-  const isWhisperReady = isModelLoaded && !whisperLoading && !whisperError;
-
   const handleCloseSnackbar = () => {
     setNotification(null);
   };
@@ -133,10 +131,6 @@ const Sidebar = ({
   };
 
   const handleVoiceClick = () => {
-    if (!isWhisperReady) {
-      showNotification('Please wait for the speech recognition model to load.', 'info');
-      return;
-    }
     setIsVoiceDialogOpen(true);
   };
 
@@ -174,10 +168,6 @@ const Sidebar = ({
 
     // Listen for global shortcut trigger
     const handleSpeechTrigger = () => {
-      if (!isWhisperReady) {
-        showNotification('Please wait for the speech recognition model to load.', 'info');
-        return;
-      }
       setIsVoiceDialogOpen(true);
     };
 
@@ -190,7 +180,7 @@ const Sidebar = ({
     return () => {
       window.removeEventListener('start-speech-recognition', eventHandler);
     };
-  }, [isWhisperReady]);
+  }, []);
 
   return (
     <>
@@ -233,12 +223,11 @@ const Sidebar = ({
               <IconButton
                 color="primary"
                 onClick={handleVoiceClick}
-                disabled={!isWhisperReady}
                 sx={{ 
                   borderRadius: 2,
-                  backgroundColor: theme => isWhisperReady ? theme.palette.action.hover : theme.palette.action.disabledBackground,
+                  backgroundColor: theme => theme.palette.action.hover,
                   '&:hover': {
-                    backgroundColor: theme => isWhisperReady ? theme.palette.action.selected : theme.palette.action.disabledBackground,
+                    backgroundColor: theme => theme.palette.action.selected,
                   }
                 }}
               >

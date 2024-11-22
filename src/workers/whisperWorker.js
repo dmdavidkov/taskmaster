@@ -248,5 +248,27 @@ self.onmessage = async (e) => {
         case 'transcribe':
             await transcribe(audio, language, config);
             break;
+        case 'unload':
+            // Reset pipeline and free memory
+            if (pipeline) {
+                if (pipeline.model) {
+                    await pipeline.model.dispose();
+                }
+                if (pipeline.processor) {
+                    await pipeline.processor.dispose();
+                }
+                if (pipeline.tokenizer) {
+                    await pipeline.tokenizer.dispose();
+                }
+            }
+            pipeline = null;
+            AutomaticSpeechRecognitionPipeline.reset();
+            processing = false;
+            // Force garbage collection if possible
+            if (typeof global !== 'undefined' && global.gc) {
+                global.gc();
+            }
+            self.postMessage({ status: 'unloaded' });
+            break;
     }
 };

@@ -17,107 +17,181 @@ const useWhisperStore = create(
       },
       selectedLanguage: localStorage.getItem('whisperLanguage') || 'en',
       autoLoadModel: localStorage.getItem('autoLoadWhisperModel') === 'true',
+      keepModelLoaded: localStorage.getItem('keepModelLoaded') === 'true',
       
       initializeWorker: () => {
         // Reset model state on worker initialization
         set({ isModelLoaded: false, isLoading: false, error: null });
         
-        if (!get().worker) {
-          try {
-            const worker = new Worker(
-              new URL('../workers/whisperWorker.js', import.meta.url),
-              { type: 'module' }
-            );
-            
-            // Set up error handler
-            worker.onerror = (error) => {
-              console.error('Worker initialization error:', error);
-              set({ error: error.message, isLoading: false });
-            };
-
-            // Handle worker termination
-            worker.onmessageerror = (event) => {
-              console.error('Worker message error:', event);
-              set({ error: 'Worker communication error', isLoading: false });
-            };
-            
-            worker.onmessage = (e) => {
-              const { status, error, progress, stage, file, total, loaded } = e.data;
-              
-              switch (status) {
-                case 'progress':
-                  if (file) {
-                    // Update progress for specific file
-                    set(state => ({
-                      loadingProgress: {
-                        ...state.loadingProgress,
-                        [file]: {
-                          progress: progress || 0,
-                          total,
-                          loaded
-                        }
-                      },
-                      loadingStage: stage || 'initializing'
-                    }));
-                  } else {
-                    // Handle non-file specific progress
-                    set({ 
-                      loadingProgress: { '_overall': { progress: progress || 0 } },
-                      loadingStage: stage || 'initializing'
-                    });
-                  }
-                  break;
-                case 'ready':
-                  set({ 
-                    isModelLoaded: true, 
-                    isLoading: false, 
-                    loadingProgress: {},
-                    loadingStage: null,
-                    error: null
-                  });
-                  break;
-                case 'error':
-                  set({ 
-                    error, 
-                    isLoading: false,
-                    isModelLoaded: false,
-                    loadingStage: null,
-                    loadingProgress: {}
-                  });
-                  break;
-              }
-            };
-            
-            set({ worker });
-          } catch (error) {
-            console.error('Error initializing worker:', error);
+        try {
+          const worker = new Worker(
+            new URL('../workers/whisperWorker.js', import.meta.url),
+            { type: 'module' }
+          );
+          
+          // Set up error handler
+          worker.onerror = (error) => {
+            console.error('Worker initialization error:', error);
             set({ error: error.message, isLoading: false });
-          }
+          };
+
+          // Handle worker termination
+          worker.onmessageerror = (event) => {
+            console.error('Worker message error:', event);
+            set({ error: 'Worker communication error', isLoading: false });
+          };
+          
+          worker.onmessage = (e) => {
+            const { status, error, progress, stage, file, total, loaded } = e.data;
+            
+            switch (status) {
+              case 'progress':
+                if (file) {
+                  // Update progress for specific file
+                  set(state => ({
+                    loadingProgress: {
+                      ...state.loadingProgress,
+                      [file]: {
+                        progress: progress || 0,
+                        total,
+                        loaded
+                      }
+                    },
+                    loadingStage: stage || 'initializing'
+                  }));
+                } else {
+                  // Handle non-file specific progress
+                  set({ 
+                    loadingProgress: { '_overall': { progress: progress || 0 } },
+                    loadingStage: stage || 'initializing'
+                  });
+                }
+                break;
+              case 'ready':
+                set({ 
+                  isModelLoaded: true, 
+                  isLoading: false, 
+                  loadingProgress: {},
+                  loadingStage: null,
+                  error: null
+                });
+                break;
+              case 'error':
+                set({ 
+                  error, 
+                  isLoading: false,
+                  isModelLoaded: false,
+                  loadingStage: null,
+                  loadingProgress: {}
+                });
+                break;
+              case 'unloaded':
+                set({
+                  isModelLoaded: false,
+                  isLoading: false,
+                  error: null,
+                  loadingProgress: {},
+                  loadingStage: null
+                });
+                break;
+            }
+          };
+          
+          set({ worker });
+
+          // Listen for unload-whisper-model event
+          window.electron.window.onUnloadWhisperModel(() => {
+            const state = get();
+            if (state.worker && state.isModelLoaded) {
+              state.unloadModel();
+            }
+          });
+
+          // Listen for window-restored event
+          window.electron.window.onWindowRestored(() => {
+            console.log('Window restored event received');
+            const state = get();
+            console.log('Current state:', {
+              autoLoadModel: state.autoLoadModel,
+              isModelLoaded: state.isModelLoaded,
+              isLoading: state.isLoading,
+              hasWorker: !!state.worker
+            });
+            
+            if (!state.worker) {
+              console.log('Worker not found, initializing...');
+              state.initializeWorker();
+            }
+            
+            // Get fresh state after potential worker initialization
+            const currentState = get();
+            if (currentState.autoLoadModel && !currentState.isModelLoaded && !currentState.isLoading) {
+              console.log('Triggering model load after window restore');
+              setTimeout(() => {
+                const finalState = get();
+                if (finalState.autoLoadModel && !finalState.isModelLoaded && !finalState.isLoading) {
+                  console.log('Executing delayed model load');
+                  finalState.loadModel();
+                } else {
+                  console.log('State changed during delay, skipping load:', {
+                    autoLoadModel: finalState.autoLoadModel,
+                    isModelLoaded: finalState.isModelLoaded,
+                    isLoading: finalState.isLoading
+                  });
+                }
+              }, 1500); // Increased delay to ensure window is fully ready
+            } else {
+              console.log('Skipping auto-load:', {
+                autoLoadModel: currentState.autoLoadModel,
+                isModelLoaded: currentState.isModelLoaded,
+                isLoading: currentState.isLoading
+              });
+            }
+          });
+
+        } catch (error) {
+          console.error('Error initializing worker:', error);
+          set({ error: error.message, isLoading: false });
         }
       },
 
       loadModel: async () => {
-        const { worker, isModelLoaded, isLoading, modelConfig } = get();
+        const state = get();
+        const { worker, isModelLoaded, isLoading } = state;
+        
+        console.log('loadModel called:', { isModelLoaded, isLoading, hasWorker: !!worker });
         
         // Don't load if already loaded or loading
-        if (isModelLoaded || isLoading) return;
-
-        // Check if we have a worker
-        if (!worker) {
-          set({ error: 'Worker not initialized. Please refresh the page.' });
+        if (isModelLoaded || isLoading) {
+          console.log('Model already loaded or loading, skipping');
           return;
         }
 
+        // Initialize worker if not exists
+        if (!worker) {
+          console.log('No worker found, initializing new worker');
+          state.initializeWorker();
+        }
+
+        // Get the latest worker state
+        const currentWorker = get().worker;
+        if (!currentWorker) {
+          console.log('Worker initialization failed');
+          set({ error: 'Worker not initialized. Please try again.' });
+          return;
+        }
+
+        console.log('Starting model load process');
         set({ isLoading: true, error: null, loadingProgress: {} });
         
         // Convert config to worker format
         const workerConfig = {
-          model_id: modelConfig.modelId,
-          encoder_model: modelConfig.encoderModel,
-          decoder_model_merged: modelConfig.decoderModel
+          model_id: state.modelConfig.modelId,
+          encoder_model: state.modelConfig.encoderModel,
+          decoder_model_merged: state.modelConfig.decoderModel
         };
         
-        worker.postMessage({ 
+        currentWorker.postMessage({ 
           type: 'load',
           config: workerConfig
         });
@@ -187,6 +261,31 @@ const useWhisperStore = create(
         localStorage.setItem('autoLoadWhisperModel', autoLoadModel);
       },
 
+      updateKeepModelLoaded: (keepLoaded) => {
+        localStorage.setItem('keepModelLoaded', keepLoaded);
+        set({ keepModelLoaded: keepLoaded });
+      },
+
+      unloadModel: async () => {
+        const { worker, isModelLoaded, keepModelLoaded } = get();
+        
+        // Check if we should unload the model
+        if (keepModelLoaded) {
+          console.log('Keeping model loaded due to user preference');
+          return;
+        }
+
+        if (worker) {
+          // Send unload message first
+          if (isModelLoaded) {
+            worker.postMessage({ type: 'unload' });
+          }
+          // Terminate worker
+          worker.terminate();
+          set({ worker: null, isModelLoaded: false, isLoading: false, error: null, loadingProgress: {} });
+        }
+      },
+
       cleanup: () => {
         const { worker } = get();
         if (worker) {
@@ -225,7 +324,8 @@ const useWhisperStore = create(
             modelId: 'onnx-community/whisper-large-v3-turbo',
           },
           selectedLanguage: 'en',
-          autoLoadModel: false
+          autoLoadModel: false,
+          keepModelLoaded: false
         });
       }
     }),
@@ -233,10 +333,10 @@ const useWhisperStore = create(
       name: 'whisper-storage',
       partialize: (state) => ({
         modelConfig: state.modelConfig,
-        isModelLoaded: state.isModelLoaded,
+        selectedLanguage: state.selectedLanguage,
         autoLoadModel: state.autoLoadModel,
-        selectedLanguage: state.selectedLanguage
-      })
+        keepModelLoaded: state.keepModelLoaded,
+      }),
     }
   )
 );

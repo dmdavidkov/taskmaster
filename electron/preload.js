@@ -2,9 +2,16 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 // Helper function for event subscriptions
 const createSubscription = (channel, callback) => {
-  const subscription = (...args) => callback(...args);
+  console.log(`Creating subscription for channel: ${channel}`);
+  const subscription = (...args) => {
+    console.log(`Event received on channel ${channel}:`, ...args);
+    callback(...args);
+  };
   ipcRenderer.on(channel, subscription);
-  return () => ipcRenderer.removeListener(channel, subscription);
+  return () => {
+    console.log(`Removing subscription for channel: ${channel}`);
+    ipcRenderer.removeListener(channel, subscription);
+  };
 };
 
 contextBridge.exposeInMainWorld('electron', {
@@ -64,7 +71,9 @@ contextBridge.exposeInMainWorld('electron', {
     minimize: () => ipcRenderer.invoke('window-control', 'minimize'),
     maximize: () => ipcRenderer.invoke('window-control', 'maximize'),
     close: () => ipcRenderer.invoke('window-control', 'close'),
-    minimizeToTray: () => ipcRenderer.invoke('window-control', 'minimize-to-tray'),
+    minimizeToTray: () => ipcRenderer.invoke('window-control', 'minimizeToTray'),
+    onUnloadWhisperModel: (callback) => createSubscription('unload-whisper-model', callback),
+    onWindowRestored: (callback) => createSubscription('window-restored', callback),
   },
   notifications: {
     show: (title, body) => ipcRenderer.invoke('show-notification', { title, body }),

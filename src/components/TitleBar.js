@@ -8,16 +8,34 @@ import CloseIcon from '@mui/icons-material/Close';
 import PaletteIcon from '@mui/icons-material/Palette';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
+import RecordVoiceOverIcon from '@mui/icons-material/RecordVoiceOver';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import ListItemText from '@mui/material/ListItemText';
 import ListItemIcon from '@mui/material/ListItemIcon';
+import Tooltip from '@mui/material/Tooltip';
 import { alpha } from '@mui/material/styles';
 import useThemeStore from '../stores/themeStore';
+import useWhisperStore from '../stores/whisperStore';
 
 const TitleBar = () => {
   const { theme, isDarkMode, setTheme, availableThemes } = useThemeStore();
+  const { isModelLoaded, isLoading, error } = useWhisperStore();
   const [anchorEl, setAnchorEl] = useState(null);
+
+  const getWhisperIconColor = () => {
+    if (error) return 'error.main';
+    if (isLoading) return 'warning.main';
+    if (isModelLoaded) return 'success.main';
+    return 'text.disabled';
+  };
+
+  const getWhisperTooltipText = () => {
+    if (error) return `Whisper Model Error: ${error}`;
+    if (isLoading) return 'Loading Whisper Model...';
+    if (isModelLoaded) return 'Whisper Model Ready';
+    return 'Whisper Model Not Loaded';
+  };
 
   const handleWindowControl = (command) => {
     window.electron.window[command]();
@@ -68,6 +86,21 @@ const TitleBar = () => {
         gap: 0.5,
         WebkitAppRegion: 'no-drag',
       }}>
+        <Tooltip title={getWhisperTooltipText()}>
+          <IconButton
+            size="small"
+            sx={{ 
+              fontSize: '1.2rem',
+              color: getWhisperIconColor(),
+              '&:hover': {
+                backgroundColor: 'action.hover',
+              },
+            }}
+          >
+            <RecordVoiceOverIcon fontSize="inherit" />
+          </IconButton>
+        </Tooltip>
+
         <IconButton
           size="small"
           onClick={handleThemeMenuOpen}

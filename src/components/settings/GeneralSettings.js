@@ -100,7 +100,7 @@ const GeneralSettings = ({ settings: initialSettings, onSettingsChange }) => {
             onChange={(e) => handleAutoStartChange(e.target.checked)}
           />
         }
-        label="Start on System Startup"
+        label="Start with Windows"
       />
     </Box>
   );

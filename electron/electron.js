@@ -92,10 +92,6 @@ function initializeIpcHandlers() {
         
         if (shouldMinimizeToTray) {
           minimizeToTray();
-          // Ensure tray exists
-          if (!tray) {
-            createTray();
-          }
         } else {
           mainWindow.close();
         }
@@ -224,6 +220,18 @@ function initializeIpcHandlers() {
       });
     }
   });
+
+  // Handle window show event
+  ipcMain.handle('window-restored', () => {
+    log.info('Window restored event received');
+    mainWindow.webContents.send('window-restored');
+  });
+
+  // Handle model unload check
+  ipcMain.handle('should-unload-model', () => {
+    const keepModelLoaded = store.get('keepModelLoaded', false);
+    return !keepModelLoaded;
+  });
 }
 
 function initializeSettingsHandlers() {
@@ -298,6 +306,26 @@ function checkTaskDueDates() {
   });
 }
 
+function minimizeToTray() {
+  log.info('Minimizing to tray');
+  mainWindow.hide();
+  
+  // Only send unload-whisper-model if keepModelLoaded is false
+  const keepModelLoaded = store.get('keepModelLoaded', false);
+  if (!keepModelLoaded) {
+    mainWindow.webContents.send('unload-whisper-model');
+  }
+}
+
+function handleWindowShow() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    log.info('Window shown');
+    if (!mainWindow.isVisible()) {
+      mainWindow.show();
+    }
+  }
+}
+
 function createTray() {
   if (tray) return; // Prevent multiple tray instances
 
@@ -318,7 +346,8 @@ function createTray() {
         label: 'Show App',
         click: () => {
           if (mainWindow) {
-            mainWindow.show();
+            log.info('Restoring window from tray...');
+            handleWindowShow();
           }
         }
       },
@@ -348,22 +377,13 @@ function createTray() {
 
     tray.on('click', () => {
       if (mainWindow) {
-        mainWindow.show();
+        handleWindowShow();
       }
     });
   } catch (error) {
     console.error('Failed to create tray:', error);
     // Log the attempted icon path
     console.error('Attempted icon path:', iconPath);
-  }
-}
-
-function minimizeToTray() {
-  if (!mainWindow) return;
-  
-  // Ensure window exists and is valid before hiding
-  if (!mainWindow.isDestroyed()) {
-    mainWindow.hide();
   }
 }
 
@@ -399,6 +419,9 @@ function createWindow() {
 
   // Initialize preferences for this window
   initializePreferences(mainWindow);
+
+  // Add show event listener
+  mainWindow.on('show', handleWindowShow);
 
   // Set Content Security Policy
   mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
@@ -472,13 +495,14 @@ function createWindow() {
 
   // Optimize memory usage
   mainWindow.on('minimize', (event) => {
-    event.preventDefault();
-    minimizeToTray();
+    // Don't prevent default minimize behavior
   });
 
   // Handle window closed
   mainWindow.on('closed', () => {
     mainWindow = null;
+    // Unregister global shortcut when window is closed
+    globalShortcut.unregister('Alt+Shift+T');
   });
 
   // Handle window state
@@ -486,22 +510,26 @@ function createWindow() {
 
   app.on('before-quit', () => {
     isQuitting = true;
+    // Unregister global shortcut before quitting
+    globalShortcut.unregister('Alt+Shift+T');
   });
 
   mainWindow.on('close', (event) => {
     const settings = settingsService.getSettings();
-    if (settings.minimizeToTray) {
+    if (settings.minimizeToTray && !isQuitting) {
       event.preventDefault();
       mainWindow.hide();
     }
   });
 
-  // If started with --minimized, create tray immediately
-  if (process.argv.includes('--minimized')) {
-    if (!tray) {
-      createTray();
+  // Register global shortcut to show/hide window
+  globalShortcut.register('Alt+Shift+T', () => {
+    if (mainWindow.isVisible()) {
+      mainWindow.hide();
+    } else {
+      mainWindow.show();
     }
-  }
+  });
 }
 
 // This method will be called when Electron has finished initialization
@@ -509,6 +537,11 @@ app.whenReady().then(async () => {
   // Initialize all handlers
   initializeIpcHandlers();
   initializeSettingsHandlers();
+
+  // Create tray immediately on app start
+  if (!tray) {
+    createTray();
+  }
 
   try {
     // Initialize AI service

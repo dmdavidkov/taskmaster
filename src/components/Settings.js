@@ -20,6 +20,7 @@ import AudioSettings from './settings/AudioSettings';
 import GeneralSettings from './settings/GeneralSettings';
 import AutoLoadSettings from './settings/AutoLoadSettings';
 import AIServiceSettings from './settings/AIServiceSettings';
+import ModelLoadingOptions from './settings/ModelLoadingOptions';
 
 const StyledDialog = styled(Dialog)(({ theme }) => ({
   '& .MuiDialog-paper': {
@@ -120,31 +121,23 @@ function TabPanel({ children, value, index, ...other }) {
 }
 
 const Settings = ({ open, onClose, initialTab = 0 }) => {
+  const [currentTab, setCurrentTab] = useState(0);
+  const [generalSettings, setGeneralSettings] = useState(null);
   const { 
-    loadModel,
-    transcribe,
+    modelConfig,
+    updateModelConfig,
     isModelLoaded,
     isLoading: whisperLoading,
     error: whisperError,
     loadingProgress,
     loadingStage,
-    modelConfig,
-    updateModelConfig,
+    loadModel,
     resetSetup,
     autoLoadModel,
     updateAutoLoadModel,
     selectedLanguage,
     updateLanguage
   } = useWhisperStore();
-  
-  const [currentTab, setCurrentTab] = useState(initialTab);
-  const [generalSettings, setGeneralSettings] = useState(null);
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingStream, setRecordingStream] = useState(null);
-  const [audioChunks, setAudioChunks] = useState([]);
-  const [transcriptionResult, setTranscriptionResult] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const recorderRef = React.useRef(null);
 
   useEffect(() => {
     window.electron.settings.get().then(savedSettings => {
@@ -182,11 +175,10 @@ const Settings = ({ open, onClose, initialTab = 0 }) => {
     loadModel();
   };
 
-  const handleAutoLoadChange = (event) => {
-    const newValue = event.target.checked;
-    updateAutoLoadModel(newValue);
+  const handleAutoLoadChange = (checked) => {
+    updateAutoLoadModel(checked);
     
-    if (newValue && !isModelLoaded && !whisperLoading) {
+    if (checked && !isModelLoaded && !whisperLoading) {
       loadModel();
     }
   };
@@ -194,73 +186,6 @@ const Settings = ({ open, onClose, initialTab = 0 }) => {
   const handleResetSetup = () => {
     if (window.confirm('Are you sure you want to reset Whisper setup? You will need to load the model again.')) {
       resetSetup();
-      setTranscriptionResult('');
-    }
-  };
-
-  const startRecording = async () => {
-    setTranscriptionResult('');
-    let mediaStream = null;
-    try {
-      mediaStream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          channelCount: 1,
-          sampleRate: 16000,
-          echoCancellation: true,
-          noiseSuppression: true,
-        } 
-      });
-      setRecordingStream(mediaStream);
-      
-      const recorder = new MediaRecorder(mediaStream, {
-        mimeType: 'audio/webm;codecs=opus'
-      });
-      
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          setAudioChunks(prev => [...prev, e.data]);
-        }
-      };
-      
-      recorderRef.current = recorder;
-      recorder.start(1000);
-      setIsRecording(true);
-    } catch (err) {
-      console.error('Error setting up audio:', err);
-      if (mediaStream) {
-        mediaStream.getTracks().forEach(track => track.stop());
-      }
-    }
-  };
-
-  const stopRecording = async () => {
-    if (recorderRef.current && recorderRef.current.state === 'recording') {
-      recorderRef.current.stop();
-      recordingStream?.getTracks().forEach(track => track.stop());
-      setRecordingStream(null);
-      setIsRecording(false);
-      
-      const currentChunks = [...audioChunks];
-      const audioBlob = new Blob(currentChunks, { type: 'audio/webm' });
-      
-      try {
-        setIsProcessing(true);
-        const processingContext = new AudioContext({ sampleRate: 16000 });
-        const arrayBuffer = await audioBlob.arrayBuffer();
-        const audioBuffer = await processingContext.decodeAudioData(arrayBuffer);
-        const audioData = audioBuffer.getChannelData(0);
-        
-        setAudioChunks([]);
-        
-        const text = await transcribe(audioData, selectedLanguage);
-        setTranscriptionResult(text);
-        
-        await processingContext.close();
-      } catch (err) {
-        console.error('Error processing audio:', err);
-      } finally {
-        setIsProcessing(false);
-      }
     }
   };
 
@@ -371,30 +296,29 @@ const Settings = ({ open, onClose, initialTab = 0 }) => {
                   loadingStage={loadingStage}
                   onLoadModel={handleLoadWhisperModel}
                   onResetSetup={handleResetSetup}
-                  autoLoadModel={autoLoadModel}
-                  onAutoLoadChange={handleAutoLoadChange}
                 />
               </Box>
-              {isModelLoaded && (
-                <Box sx={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  height: '100%',
-                  borderLeft: 1,
-                  borderColor: 'divider',
-                  pl: 3
-                }}>
-                  <AudioSettings
-                    isRecording={isRecording}
-                    isProcessing={isProcessing}
-                    selectedLanguage={selectedLanguage}
-                    onLanguageChange={updateLanguage}
-                    onStartRecording={startRecording}
-                    onStopRecording={stopRecording}
-                    transcriptionResult={transcriptionResult}
-                  />
-                </Box>
-              )}
+              <Box sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                height: '100%',
+                borderLeft: 1,
+                borderColor: 'divider',
+                pl: 3,
+                gap: 4
+              }}>
+                <ModelLoadingOptions
+                  autoLoadModel={autoLoadModel}
+                  onAutoLoadChange={handleAutoLoadChange}
+                  whisperLoading={whisperLoading}
+                />
+                <AudioSettings
+                  isRecording={false}
+                  isProcessing={false}
+                  selectedLanguage={selectedLanguage}
+                  onLanguageChange={updateLanguage}
+                />
+              </Box>
             </Box>
           </TabPanel>
 

@@ -18,6 +18,49 @@ import {
 import AudioVisualizer from './AudioVisualizer';
 import useWhisperStore from '../stores/whisperStore';
 
+const formatBytes = (bytes) => {
+  if (!bytes) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+};
+
+const getLoadingMessage = (progress, stage) => {
+  if (stage === 'downloading') {
+    if (progress._cached) {
+      return 'Loading model from cache...';
+    }
+
+    const files = Object.entries(progress)
+      .filter(([_, data]) => 
+        data.total > 0 && 
+        data.loaded > 0 && 
+        !data.cached && 
+        data.loaded !== data.total
+      )
+      .sort((a, b) => b[1].total - a[1].total);
+    
+    if (files.length === 0) {
+      return 'Preparing model...';
+    }
+    
+    return files.map(([filename, data]) => {
+      const percentage = (data.progress || 0).toFixed(1);
+      const loaded = formatBytes(data.loaded);
+      const total = formatBytes(data.total);
+      return `${filename}: ${percentage}% (${loaded}/${total})`;
+    }).join('\n');
+  } else if (stage === 'loading') {
+    return progress._cached ? 
+      'Initializing cached model...' : 
+      'Loading model into memory...';
+  } else if (stage === 'preparing') {
+    return 'Preparing model for inference...';
+  }
+  return 'Initializing...';
+};
+
 const VoiceRecordDialog = ({ 
   open, 
   onClose, 
@@ -30,7 +73,10 @@ const VoiceRecordDialog = ({
     isLoading: whisperLoading,
     transcribe,
     error: whisperError,
-    selectedLanguage
+    selectedLanguage,
+    loadModel,
+    loadingProgress,
+    loadingStage
   } = useWhisperStore();
 
   const [isRecording, setIsRecording] = useState(false);
@@ -39,6 +85,8 @@ const VoiceRecordDialog = ({
   const [transcriptionError, setTranscriptionError] = useState('');
   const [processingState, setProcessingState] = useState('');
   const [audioStream, setAudioStream] = useState(null);
+  const [showLoadingOverlay, setShowLoadingOverlay] = useState(false);
+  const [hasStartedOnce, setHasStartedOnce] = useState(false);
 
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -80,6 +128,7 @@ const VoiceRecordDialog = ({
 
       mediaRecorder.start();
       setIsRecording(true);
+      setHasStartedOnce(true);
       setTranscriptionError('');
     } catch (error) {
       console.error('Error starting recording:', error);
@@ -122,25 +171,94 @@ const VoiceRecordDialog = ({
     }
   };
 
+  // Effect to handle model loading when dialog is opened
   useEffect(() => {
-    if (open && autoStart && isModelLoaded && !whisperLoading && !whisperError) {
-      // Small delay to ensure dialog is fully mounted
-      const timer = setTimeout(() => {
-        startRecording();
-      }, 300);
-      return () => clearTimeout(timer);
-    }
-  }, [open, autoStart, isModelLoaded, whisperLoading, whisperError, startRecording]);
+    let mounted = true;
+    let errorTimeout = null;
+
+    const initializeModel = async () => {
+      // If there's already an error, show it and close
+      if (whisperError) {
+        setShowLoadingOverlay(false);
+        setTranscriptionError(whisperError);
+        errorTimeout = setTimeout(() => {
+          if (mounted) {
+            handleClose();
+          }
+        }, 2000);
+        return;
+      }
+
+      // Only try to load if we're open and not already loaded/loading
+      if (open && !isModelLoaded && !whisperLoading) {
+        setShowLoadingOverlay(true);
+        try {
+          await loadModel();
+          if (mounted) {
+            if (whisperError) {  // Check for errors after loading
+              setShowLoadingOverlay(false);
+              setTranscriptionError(whisperError);
+              errorTimeout = setTimeout(() => {
+                if (mounted) {
+                  handleClose();
+                }
+              }, 2000);
+            } else {
+              setShowLoadingOverlay(false);
+              // Start recording after a short delay
+              if (!hasStartedOnce && autoStart) {
+                setTimeout(() => {
+                  if (mounted) {
+                    startRecording();
+                  }
+                }, 300);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error loading model:', error);
+          if (mounted) {
+            setShowLoadingOverlay(false);
+            setTranscriptionError(error.message || 'Failed to load speech recognition model');
+            errorTimeout = setTimeout(() => {
+              if (mounted) {
+                handleClose();
+              }
+            }, 2000);
+          }
+        }
+      } else if (open && isModelLoaded && !whisperLoading && !whisperError && !hasStartedOnce && autoStart) {
+        // Model is already loaded, start recording directly
+        setShowLoadingOverlay(false);
+        setTimeout(() => {
+          if (mounted) {
+            startRecording();
+          }
+        }, 300);
+      }
+    };
+
+    initializeModel();
+
+    return () => {
+      mounted = false;
+      if (errorTimeout) {
+        clearTimeout(errorTimeout);
+      }
+    };
+  }, [open, isModelLoaded, whisperLoading, whisperError, loadModel, autoStart, startRecording, handleClose, hasStartedOnce]);
 
   useEffect(() => {
     if (!open) {
-      // Cleanup when dialog closes
+      // Reset states when dialog closes
       if (isRecording) {
         stopRecording();
       }
       setTranscribedText('');
       setTranscriptionError('');
       setProcessingState('');
+      setShowLoadingOverlay(false);
+      setHasStartedOnce(false);
     }
   }, [open, isRecording, stopRecording]);
 
@@ -222,6 +340,33 @@ const VoiceRecordDialog = ({
           mt: '15%', 
           mb: 'auto'
         }}>
+          {/* Loading Overlay */}
+          {showLoadingOverlay && !isRecording && (
+            <Paper
+              elevation={0}
+              sx={{
+                p: 3,
+                width: '100%',
+                bgcolor: (theme) => theme.palette.mode === 'dark' 
+                  ? 'rgba(0, 0, 0, 0.85)'
+                  : 'rgba(255, 255, 255, 0.9)',
+                backdropFilter: 'blur(10px)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 2
+              }}
+            >
+              <CircularProgress size={40} />
+              <Typography variant="h6" align="center">
+                Loading Speech Recognition Model
+              </Typography>
+              <Typography variant="body2" align="center" color="textSecondary" sx={{ whiteSpace: 'pre-line' }}>
+                {getLoadingMessage(loadingProgress, loadingStage)}
+              </Typography>
+            </Paper>
+          )}
+
           {/* Status Messages */}
           {whisperError && (
             <Alert severity="error" sx={{ width: '100%' }}>

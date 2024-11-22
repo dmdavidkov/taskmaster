@@ -27,6 +27,7 @@ import { initializeApp } from './init';
 import Tooltip from '@mui/material/Tooltip';
 import IconButton from '@mui/material/IconButton';
 import useThemeStore from './stores/themeStore';
+import useWhisperStore from './stores/whisperStore';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -134,6 +135,18 @@ function App() {
   useEffect(() => {
     localStorage.setItem('compactView', JSON.stringify(compactView));
   }, [compactView]);
+
+  useEffect(() => {
+    // Listen for unload whisper model event
+    const cleanup = window.electron.window.onUnloadWhisperModel(() => {
+      const whisperStore = useWhisperStore.getState();
+      whisperStore.unloadModel();
+    });
+
+    return () => {
+      if (cleanup) cleanup();
+    };
+  }, []);
 
   const handleTaskAction = async (actionFn, ...args) => {
     try {

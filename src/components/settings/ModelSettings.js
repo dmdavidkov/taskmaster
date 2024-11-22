@@ -13,6 +13,7 @@ import {
   MenuItem,
   FormHelperText
 } from '@mui/material';
+import useWhisperStore from '../../stores/whisperStore';
 
 const MODEL_OPTIONS = {
   models: [
@@ -137,10 +138,11 @@ const ModelSettings = ({
   onLoadModel,
   onResetSetup
 }) => {
+  const { keepModelLoaded, updateKeepModelLoaded } = useWhisperStore();
   const renderModelStatus = () => {
     if (whisperError) {
       return (
-        <Alert severity="error" sx={{ width: '100%' }}>
+        <Alert severity="error" sx={{ width: '100%', mb: 2 }}>
           {whisperError}
         </Alert>
       );
@@ -294,25 +296,14 @@ const ModelSettings = ({
         </Button>
         <Button
           variant="outlined"
+          color="error"
+          size="small"
           onClick={onResetSetup}
           disabled={whisperLoading}
-          size="small"
         >
           Reset Setup
         </Button>
       </Box>
-
-      <FormControlLabel
-        control={
-          <Switch
-            checked={autoLoadModel}
-            onChange={onAutoLoadChange}
-            disabled={whisperLoading}
-          />
-        }
-        label="Auto-load model on startup"
-        sx={{ mt: 1 }}
-      />
 
       {renderModelStatus()}
     </Box>

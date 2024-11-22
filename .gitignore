@@ -36,3 +36,4 @@ yarn-error.log*
 /dist_electron
 .env
 
+CODEBASE_DOCUMENTATION.txt
