@@ -83,6 +83,7 @@ class ErrorBoundary extends React.Component {
 
 function App() {
   const { isDarkMode, muiTheme, initializeTheme } = useThemeStore();
+  const [isReady, setIsReady] = useState(false);
   
   const [selectedTask, setSelectedTask] = useState(null);
   const [selectedTab, setSelectedTab] = useState(() => {
@@ -102,9 +103,20 @@ function App() {
   const { tasks, loading, createTask, updateTask, deleteTask, toggleTaskCompletion } = useTaskStore();
 
   useEffect(() => {
-    // Initialize app and theme when component mounts
-    initializeApp();
-    initializeTheme();
+    const initialize = async () => {
+      try {
+        await initializeApp();
+        await initializeTheme();
+        setIsReady(true);
+        // Signal mounting after initialization
+        window.electron?.ipcRenderer.invoke('react-mounted');
+      } catch (error) {
+        console.error('Initialization failed:', error);
+        setIsReady(true); // Show app even if initialization fails
+      }
+    };
+
+    initialize();
 
     // Listen for show-task events from notifications
     window.electron?.onShowTask((taskId) => {
@@ -114,7 +126,7 @@ function App() {
         setDrawerOpen(true);
       }
     });
-  }, [tasks, initializeTheme]); // Re-run when tasks or initializeTheme changes
+  }, []);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -212,6 +224,22 @@ function App() {
       }
     }
   };
+
+  if (!isReady) {
+    return (
+      <Box
+        sx={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          bgcolor: 'background.default',
+          zIndex: 9999,
+        }}
+      />
+    );
+  }
 
   return (
     <ErrorBoundary>

@@ -16,7 +16,16 @@ const createSubscription = (channel, callback) => {
 
 contextBridge.exposeInMainWorld('electron', {
   ipcRenderer: {
-    invoke: (channel, ...args) => ipcRenderer.invoke(channel, ...args),
+    invoke: (channel, ...args) => {
+      const validChannels = [
+        'react-mounted',
+        // ... your other valid channels
+      ];
+      if (validChannels.includes(channel)) {
+        return ipcRenderer.invoke(channel, ...args);
+      }
+      throw new Error(`Invalid channel: ${channel}`);
+    },
   },
   env: {
     REACT_APP_NEBIUS_API_KEY: process.env.REACT_APP_NEBIUS_API_KEY,
@@ -54,6 +63,7 @@ contextBridge.exposeInMainWorld('electron', {
   },
   app: {
     getVersion: () => ipcRenderer.invoke('get-app-version'),
+    signalReactMounted: () => ipcRenderer.invoke('react-mounted'),
   },
   preferences: {
     get: (key) => ipcRenderer.invoke('preferences:get', key),

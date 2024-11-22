@@ -232,6 +232,38 @@ function initializeIpcHandlers() {
     const keepModelLoaded = store.get('keepModelLoaded', false);
     return !keepModelLoaded;
   });
+
+  // Add this with your other IPC handlers
+  ipcMain.handle('react-mounted', () => {
+    log.info('React app mounted');
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.executeJavaScript(`
+        document.documentElement.classList.add('react-mounted');
+      `);
+    }
+  });
+}
+
+// Add this function to get theme background color
+function getThemeBackgroundColor(themeName) {
+  const themeColors = {
+    light: '#ffffff',
+    dark: '#121212',
+    purple: '#1a121c',
+    purpleMist: '#F0EDF1',
+    ocean: '#e0f7fa',
+    sunset: '#1a0f0f',
+    forest: '#f1f8e9',
+    dreamscape: '#1a1a2e',
+  };
+  
+  // Handle system theme differently using nativeTheme
+  if (themeName === 'system') {
+    const { nativeTheme } = require('electron');
+    return nativeTheme.shouldUseDarkColors ? '#121212' : '#ffffff';
+  }
+  
+  return themeColors[themeName] || themeColors.light;
 }
 
 function initializeSettingsHandlers() {
@@ -239,8 +271,13 @@ function initializeSettingsHandlers() {
     return settingsService.getSettings();
   });
 
-  ipcMain.handle('settings:setTheme', (_, theme) => {
-    return settingsService.setTheme(theme);
+  ipcMain.handle('settings:setTheme', async (_, theme) => {
+    const result = await settingsService.setTheme(theme);
+    // Update window background color when theme changes
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setBackgroundColor(getThemeBackgroundColor(theme));
+    }
+    return result;
   });
 
   ipcMain.handle('settings:setNotifications', (_, level) => {
@@ -396,11 +433,16 @@ function showNotification(title, body) {
 }
 
 function createWindow() {
+  // Get current theme from settings
+  const settings = settingsService.getSettings();
+  const currentTheme = settings?.theme || 'system';
+  const backgroundColor = getThemeBackgroundColor(currentTheme);
+  
   // Create the browser window.
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
-    show: !process.argv.includes('--minimized'), // Don't show if --minimized argument is present
+    show: false,
     frame: false,
     webPreferences: {
       nodeIntegration: false,
@@ -414,14 +456,25 @@ function createWindow() {
       backgroundThrottling: true,
       devTools: true,
     },
-    backgroundColor: '#ffffff',
+    backgroundColor: backgroundColor,
   });
 
   // Initialize preferences for this window
   initializePreferences(mainWindow);
 
-  // Add show event listener
-  mainWindow.on('show', handleWindowShow);
+  // Inject CSS before any content loads
+  mainWindow.webContents.on('did-start-loading', () => {
+    mainWindow.webContents.insertCSS(`
+      html, body, #root {
+        background: ${backgroundColor} !important;
+      }
+    `);
+  });
+
+  // Show window when everything is ready
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+  });
 
   // Set Content Security Policy
   mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
@@ -438,11 +491,6 @@ function createWindow() {
         ]
       }
     });
-  });
-
-  // Wait for window to be ready before showing
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
   });
 
   // Enable WebGPU and GPU features
