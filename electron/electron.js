@@ -380,8 +380,8 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    show: !process.argv.includes('--minimized'), // Don't show if --minimized argument is present
     frame: false,
-    show: false,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -495,6 +495,13 @@ function createWindow() {
       mainWindow.hide();
     }
   });
+
+  // If started with --minimized, create tray immediately
+  if (process.argv.includes('--minimized')) {
+    if (!tray) {
+      createTray();
+    }
+  }
 }
 
 // This method will be called when Electron has finished initialization
@@ -519,7 +526,6 @@ app.whenReady().then(async () => {
   }
   
   createWindow();
-  createTray();
   
   // Start task checking service with immediate check
   taskService.startTaskChecking();

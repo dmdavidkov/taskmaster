@@ -16,7 +16,8 @@ class SettingsService {
                 theme: 'system',
                 notifications: 'all', // 'all', 'important', 'none'
                 minimizeToTray: true,
-                autoStart: false
+                autoStart: false,
+                startMinimized: true
             });
         }
     }
@@ -46,6 +47,7 @@ class SettingsService {
 
         try {
             if (enabled) {
+                await autoLauncher.setArguments(['--minimized']);
                 await autoLauncher.enable();
             } else {
                 await autoLauncher.disable();
