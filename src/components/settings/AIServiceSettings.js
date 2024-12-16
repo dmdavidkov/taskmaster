@@ -56,6 +56,7 @@ const AIServiceSettings = () => {
       baseURL: 'https://api.studio.nebius.ai/v1/',
       apiKey: '',
       modelName: 'Qwen/Qwen2.5-72B-Instruct-fast',
+      asrModel: '',
     });
   };
 
@@ -95,6 +96,18 @@ const AIServiceSettings = () => {
           helperText={!localConfig.modelName && "Model name is required"}
         />
         <FormHelperText>The name of the AI model to use</FormHelperText>
+      </FormControl>
+
+      <FormControl fullWidth>
+        <TextField
+          label="External ASR Model (Optional)"
+          value={localConfig.asrModel || ''}
+          onChange={handleInputChange('asrModel')}
+          placeholder="e.g., whisper-large-v3"
+        />
+        <FormHelperText>
+          Optional: Specify an external ASR model for speech recognition. Leave empty to use the default Whisper model.
+        </FormHelperText>
       </FormControl>
 
       {error && (

@@ -5,15 +5,58 @@ const isDev = process.env.NODE_ENV === 'development';
 const Store = require('electron-store');
 const store = new Store();
 require('dotenv').config();
+const Groq = require('groq-sdk');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
 
 class AIService {
     constructor() {
         this.client = null;
+        this.groqClient = null;
         this.modelName = null;
         this.currentApiKey = null;
         this.isInitialized = false;
         this.initializationError = null;
         this.initializationPromise = null;
+
+        // Register IPC handlers
+        this.registerIpcHandlers();
+    }
+
+    registerIpcHandlers() {
+        // Remove any existing handlers first
+        ipcMain.removeHandler('ai:processText');
+        ipcMain.removeHandler('ai:testConnection');
+        ipcMain.removeHandler('ai:transcribeAudio');
+
+        // Register handlers
+        ipcMain.handle('ai:processText', async (event, data) => {
+            try {
+                return await this.processText(data);
+            } catch (error) {
+                log.error('Error in ai:processText:', error);
+                throw error;
+            }
+        });
+
+        ipcMain.handle('ai:testConnection', async (event, config) => {
+            try {
+                return await this.testConnection(config);
+            } catch (error) {
+                log.error('Error in ai:testConnection:', error);
+                throw error;
+            }
+        });
+
+        ipcMain.handle('ai:transcribeAudio', async (event, { audio, language, model }) => {
+            try {
+                return await this.transcribeAudio(audio, language);
+            } catch (error) {
+                log.error('Error in ai:transcribeAudio:', error);
+                throw error;
+            }
+        });
     }
 
     async initialize() {
@@ -24,9 +67,32 @@ class AIService {
         this.initializationPromise = (async () => {
             try {
                 const config = this.getCurrentConfig();
-                await this.initializeClient(config);
+                
+                if (!config.apiKey) {
+                    this.isInitialized = false;
+                    this.initializationError = new Error('API key not configured');
+                    return;
+                }
+
+                // Initialize OpenAI client
+                this.client = new OpenAI({
+                    baseURL: config.baseURL,
+                    apiKey: config.apiKey,
+                });
+
+                // Initialize Groq client if ASR model is configured
+                if (config.asrModel) {
+                    this.groqClient = new Groq({
+                        apiKey: config.apiKey
+                    });
+                }
+
+                this.modelName = config.modelName;
+                this.currentApiKey = config.apiKey;
                 this.isInitialized = true;
-                log.info('AI Service initialized with model:', this.modelName);
+                this.initializationError = null;
+
+                log.info('AI Service initialized successfully');
             } catch (error) {
                 this.isInitialized = false;
                 this.initializationError = error;
@@ -38,63 +104,25 @@ class AIService {
         return this.initializationPromise;
     }
 
-    async initializeClient(config = {}) {
-        const currentConfig = this.getCurrentConfig();
-        const apiKey = config.apiKey || currentConfig.apiKey;
-        const baseURL = config.baseURL || currentConfig.baseURL;
-        const modelName = config.modelName || currentConfig.modelName;
-        
-        if (!apiKey) {
-            throw new Error('API key is required. Please configure the AI service.');
-        }
-
-        log.info('Initializing AI Service with base URL:', baseURL);
-        log.info('Using model:', modelName);
-
-        try {
-            this.client = new OpenAI({
-                baseURL: baseURL,
-                apiKey: apiKey,
-            });
-
-            this.modelName = modelName;
-            this.currentApiKey = apiKey;
-            this.isInitialized = true;
-            this.initializationError = null;
-        } catch (error) {
-            this.isInitialized = false;
-            this.initializationError = error;
-            throw error;
-        }
-    }
-
     getCurrentConfig() {
-        // Always get fresh values from electron-store
-        const config = {
+        return {
             baseURL: store.get('aiService.baseURL', 'https://api.studio.nebius.ai/v1/'),
             apiKey: store.get('aiService.apiKey', ''),
-            modelName: store.get('aiService.modelName', 'Qwen/Qwen2.5-72B-Instruct-fast')
+            modelName: store.get('aiService.modelName', 'Qwen/Qwen2.5-72B-Instruct-fast'),
+            asrModel: store.get('aiService.asrModel', '')
         };
-
-        // Only use .env as fallback if apiKey is empty
-        if (!config.apiKey && isDev) {
-            config.apiKey = process.env.REACT_APP_NEBIUS_API_KEY || '';
-        }
-
-        return config;
     }
 
     ensureInitialized() {
         if (!this.isInitialized) {
-            const error = this.initializationError || new Error('AI service not initialized. Please configure the service first.');
-            throw error;
+            throw new Error('AI service not initialized. Please configure the service first.');
         }
 
         const currentConfig = this.getCurrentConfig();
         
         // Re-initialize if config has changed
-        if (!this.client || currentConfig.apiKey !== this.currentApiKey) {
-            this.initializeClient(currentConfig);
+        if (currentConfig.apiKey !== this.currentApiKey) {
+            this.initialize();
         }
     }
 
@@ -272,26 +300,14 @@ class AIService {
         - Infer priority from urgency words and context in the given language`;
     }
 
-    async testConnection(config) {
+    async testConnection(testConfig) {
         try {
-            // Immediately update store with test config
-            if (config) {
-                store.set('aiService.baseURL', config.baseURL);
-                store.set('aiService.apiKey', config.apiKey);
-                store.set('aiService.modelName', config.modelName);
-            }
-
-            // Get the config we're testing
-            const testConfig = config || this.getCurrentConfig();
-            
-            // Create a temporary client for testing
-            const testClient = new OpenAI({
+            const tempClient = new OpenAI({
                 baseURL: testConfig.baseURL,
                 apiKey: testConfig.apiKey,
             });
 
-            // Try a simple completion to test the connection
-            const completion = await testClient.chat.completions.create({
+            const completion = await tempClient.chat.completions.create({
                 temperature: 0,
                 max_tokens: 10,
                 model: testConfig.modelName,
@@ -304,8 +320,8 @@ class AIService {
             });
 
             if (completion.choices[0]?.message?.content) {
-                // Only update the main client if the test was successful
-                await this.initializeClient(testConfig);
+                // Only initialize the service if the test was successful
+                await this.initialize();
                 return { success: true };
             } else {
                 throw new Error('Invalid response from AI service');
@@ -318,38 +334,48 @@ class AIService {
             throw error;
         }
     }
+
+    async transcribeAudio(audioData, language) {
+        this.ensureInitialized();
+        
+        try {
+            // Create a temporary file to store the audio data
+            const tempDir = os.tmpdir();
+            const tempFile = path.join(tempDir, `temp-${Date.now()}.wav`);
+            
+            // Convert ArrayBuffer to Buffer for Node.js
+            const buffer = Buffer.from(audioData);
+            
+            // Write the audio buffer to a temporary file
+            await fs.promises.writeFile(tempFile, buffer);
+
+            // Initialize Groq client if using Groq ASR
+            if (!this.groqClient) {
+                this.groqClient = new Groq({
+                    apiKey: this.currentApiKey
+                });
+            }
+
+            // Make the transcription request
+            const transcription = await this.groqClient.audio.transcriptions.create({
+                file: fs.createReadStream(tempFile),
+                model: this.getCurrentConfig().asrModel || "whisper-large-v3-turbo",
+                language: language,
+                response_format: "text"
+            });
+
+            // Clean up the temporary file
+            await fs.promises.unlink(tempFile);
+
+            return transcription.text || transcription;
+
+        } catch (error) {
+            log.error('Error in transcribeAudio:', error);
+            throw error;
+        }
+    }
 }
 
-// Create a single instance
+// Create and export a single instance
 const aiService = new AIService();
-
-// Handle IPC calls
-ipcMain.handle('ai:processText', async (event, { text, language }) => {
-    try {
-        return await aiService.processText({ text, language });
-    } catch (error) {
-        log.error('Error in ai:processText:', error);
-        throw error;
-    }
-});
-
-ipcMain.handle('ai:testConnection', async (event, config) => {
-    try {
-        // Test the connection with new config
-        const result = await aiService.testConnection(config);
-        
-        // If successful, save the config
-        if (result.success) {
-            store.set('aiService.baseURL', config.baseURL);
-            store.set('aiService.apiKey', config.apiKey);
-            store.set('aiService.modelName', config.modelName);
-        }
-        
-        return result;
-    } catch (error) {
-        log.error('Error in ai:testConnection:', error);
-        throw error;
-    }
-});
-
 module.exports = aiService;

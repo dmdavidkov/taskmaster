@@ -12,6 +12,7 @@ import {
 import MicIcon from '@mui/icons-material/Mic';
 import StopIcon from '@mui/icons-material/Stop';
 import useWhisperStore from '../../stores/whisperStore';
+import useAIServiceStore from '../../stores/aiServiceStore';
 
 export const LANGUAGE_OPTIONS = [
   { value: 'en', label: 'English', nativeName: 'English' },
@@ -37,6 +38,7 @@ const AudioSettings = ({
   const mediaRecorder = useRef(null);
   const audioChunks = useRef([]);
   const { transcribe, isModelLoaded } = useWhisperStore();
+  const { config: aiConfig } = useAIServiceStore();
 
   const processAudioData = async (audioBlob) => {
     try {
@@ -53,7 +55,7 @@ const AudioSettings = ({
   };
 
   const startRecording = useCallback(async () => {
-    if (!isModelLoaded) {
+    if (!aiConfig.asrModel && !isModelLoaded) {
       setError('Please load the Whisper model first in the Model Settings tab.');
       return;
     }
@@ -93,7 +95,7 @@ const AudioSettings = ({
       setError('Error accessing microphone: ' + err.message);
       console.error('Error starting recording:', err);
     }
-  }, [isModelLoaded, transcribe, selectedLanguage]);
+  }, [isModelLoaded, transcribe, selectedLanguage, aiConfig.asrModel]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorder.current && mediaRecorder.current.state !== 'inactive') {

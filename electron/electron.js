@@ -66,9 +66,6 @@ if (isDev) {
 // Get package.json for app version
 const packageJson = require('../package.json');
 
-// Initialize AI Service after app is ready
-let aiService;
-
 // Initialize all IPC handlers before creating window
 function initializeIpcHandlers() {
   // Window control handlers
@@ -291,6 +288,7 @@ function initializeSettingsHandlers() {
   ipcMain.handle('settings:setAutoStart', (_, enabled) => {
     return settingsService.setAutoStart(enabled);
   });
+  
 }
 
 function scheduleNextMinuteCheck() {
@@ -593,7 +591,7 @@ app.whenReady().then(async () => {
 
   try {
     // Initialize AI service
-    aiService = require('./services/aiService');
+    const aiService = require('./services/aiService');
     // Only try to initialize if we have an API key
     const config = store.get('aiService');
     if (config && config.apiKey) {

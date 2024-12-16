@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import useAIServiceStore from './aiServiceStore';
 
 const useWhisperStore = create(
   persist(
@@ -198,6 +199,72 @@ const useWhisperStore = create(
       },
 
       transcribe: async (audio, language) => {
+        const state = get();
+        const aiConfig = useAIServiceStore.getState().config;
+        
+        // If local model is loaded, use it regardless of external ASR configuration
+        if (state.isModelLoaded) {
+          console.log('🎤 Using local Whisper model for transcription');
+          return state.transcribeLocal(audio, language);
+        }
+        
+        // If local model is not loaded but external ASR is configured, use that
+        if (aiConfig.asrModel) {
+          console.log('🌐 Using external ASR service for transcription');
+          try {
+            // Convert Float32Array to regular array
+            const audioArray = Array.from(audio);
+            
+            // Convert to 16-bit PCM
+            const pcmData = new Int16Array(audioArray.map(x => x * 32767));
+            
+            // Create WAV file header
+            const wavHeader = new ArrayBuffer(44);
+            const view = new DataView(wavHeader);
+            
+            // WAV header creation
+            // "RIFF" chunk descriptor
+            view.setUint32(0, 0x52494646, false); // "RIFF"
+            view.setUint32(4, 36 + pcmData.length * 2, true); // file size
+            view.setUint32(8, 0x57415645, false); // "WAVE"
+            
+            // "fmt " sub-chunk
+            view.setUint32(12, 0x666D7420, false); // "fmt "
+            view.setUint32(16, 16, true); // subchunk size
+            view.setUint16(20, 1, true); // PCM audio format
+            view.setUint16(22, 1, true); // mono channel
+            view.setUint32(24, 16000, true); // sample rate
+            view.setUint32(28, 16000 * 2, true); // byte rate
+            view.setUint16(32, 2, true); // block align
+            view.setUint16(34, 16, true); // bits per sample
+            
+            // "data" sub-chunk
+            view.setUint32(36, 0x64617461, false); // "data"
+            view.setUint32(40, pcmData.length * 2, true); // data size
+            
+            // Combine header and PCM data
+            const wavBlob = new Blob([wavHeader, pcmData], { type: 'audio/wav' });
+            const wavBuffer = await wavBlob.arrayBuffer();
+            
+            // Call external ASR service
+            const text = await window.electron.ai.transcribeAudio({
+              audio: wavBuffer,
+              language,
+              model: aiConfig.asrModel
+            });
+            
+            return text;
+          } catch (error) {
+            console.error('External ASR failed:', error);
+            throw error;
+          }
+        }
+        
+        // No local model and no external ASR configured
+        throw new Error('No transcription service available. Please either load the Whisper model or configure an external ASR service.');
+      },
+
+      transcribeLocal: async (audio, language) => {
         const { worker, isModelLoaded } = get();
         
         if (!worker || !isModelLoaded) {

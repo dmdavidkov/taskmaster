@@ -8,6 +8,7 @@ const useAIServiceStore = create(
         baseURL: 'https://api.studio.nebius.ai/v1/',
         apiKey: '',
         modelName: 'Qwen/Qwen2.5-72B-Instruct-fast',
+        asrModel: '',
       },
       isConfigured: false,
       isLoading: false,
@@ -18,23 +19,35 @@ const useAIServiceStore = create(
       setTestResult: (result) => set({ testResult: result }),
       setError: (error) => set({ error: error }),
 
-      updateConfig: async ({ baseURL, apiKey, modelName }) => {
+      updateConfig: async ({ baseURL, apiKey, modelName, asrModel }) => {
         const newConfig = { ...get().config };
         
         if (baseURL !== undefined) {
           newConfig.baseURL = baseURL;
-          await window.electron.preferences.set('baseURL', baseURL);
+          await window.electron.preferences.set('aiService.baseURL', baseURL);
         }
         if (apiKey !== undefined) {
           newConfig.apiKey = apiKey;
-          await window.electron.preferences.set('apiKey', apiKey);
+          await window.electron.preferences.set('aiService.apiKey', apiKey);
         }
         if (modelName !== undefined) {
           newConfig.modelName = modelName;
-          await window.electron.preferences.set('modelName', modelName);
+          await window.electron.preferences.set('aiService.modelName', modelName);
+        }
+        if (asrModel !== undefined) {
+          newConfig.asrModel = asrModel;
+          await window.electron.preferences.set('aiService.asrModel', asrModel);
         }
         
         set({ config: newConfig, error: null });
+        
+        // Reinitialize the AI service
+        try {
+          await window.electron.ai.testConnection(newConfig);
+        } catch (error) {
+          set({ error: error.message });
+          throw error;
+        }
       },
 
       initializeConfig: async () => {
@@ -48,6 +61,7 @@ const useAIServiceStore = create(
               baseURL: baseURL || get().config.baseURL,
               apiKey: apiKey || get().config.apiKey,
               modelName: modelName || get().config.modelName,
+              asrModel: get().config.asrModel,
             }
           });
         }
@@ -92,11 +106,13 @@ const useAIServiceStore = create(
           baseURL: 'https://api.studio.nebius.ai/v1/',
           apiKey: '',
           modelName: 'Qwen/Qwen2.5-72B-Instruct-fast',
+          asrModel: '',
         };
         
         await window.electron.preferences.set('baseURL', defaultConfig.baseURL);
         await window.electron.preferences.set('apiKey', defaultConfig.apiKey);
         await window.electron.preferences.set('modelName', defaultConfig.modelName);
+        await window.electron.preferences.set('asrModel', defaultConfig.asrModel);
         
         set({
           config: defaultConfig,

@@ -32,8 +32,9 @@ contextBridge.exposeInMainWorld('electron', {
     NODE_ENV: process.env.NODE_ENV || 'production'
   },
   ai: {
-    processText: (params) => ipcRenderer.invoke('ai:processText', params),
-    testConnection: (config) => ipcRenderer.invoke('ai:testConnection', config)
+    processText: (data) => ipcRenderer.invoke('ai:processText', data),
+    testConnection: (config) => ipcRenderer.invoke('ai:testConnection', config),
+    transcribeAudio: (data) => ipcRenderer.invoke('ai:transcribeAudio', data),
   },
   store: {
     get: (key) => ipcRenderer.invoke('get-store-value', key),

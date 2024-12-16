@@ -17,6 +17,7 @@ import {
 } from '@mui/icons-material';
 import AudioVisualizer from './AudioVisualizer';
 import useWhisperStore from '../stores/whisperStore';
+import useAIServiceStore from '../stores/aiServiceStore';
 
 const formatBytes = (bytes) => {
   if (!bytes) return '0 B';
@@ -27,38 +28,18 @@ const formatBytes = (bytes) => {
 };
 
 const getLoadingMessage = (progress, stage) => {
-  if (stage === 'downloading') {
-    if (progress._cached) {
-      return 'Loading model from cache...';
-    }
-
-    const files = Object.entries(progress)
-      .filter(([_, data]) => 
-        data.total > 0 && 
-        data.loaded > 0 && 
-        !data.cached && 
-        data.loaded !== data.total
-      )
-      .sort((a, b) => b[1].total - a[1].total);
-    
-    if (files.length === 0) {
-      return 'Preparing model...';
-    }
-    
-    return files.map(([filename, data]) => {
-      const percentage = (data.progress || 0).toFixed(1);
-      const loaded = formatBytes(data.loaded);
-      const total = formatBytes(data.total);
-      return `${filename}: ${percentage}% (${loaded}/${total})`;
-    }).join('\n');
-  } else if (stage === 'loading') {
-    return progress._cached ? 
-      'Initializing cached model...' : 
-      'Loading model into memory...';
-  } else if (stage === 'preparing') {
-    return 'Preparing model for inference...';
+  if (aiConfig.asrModel) {
+    return 'Using external ASR service...';
   }
-  return 'Initializing...';
+  
+  switch (stage) {
+    case 'downloading':
+      return `Downloading Whisper model...\n${Math.round(progress)}%`;
+    case 'initializing':
+      return 'Initializing speech recognition...';
+    default:
+      return 'Preparing speech recognition...';
+  }
 };
 
 const VoiceRecordDialog = ({ 
@@ -78,6 +59,8 @@ const VoiceRecordDialog = ({
     loadingProgress,
     loadingStage
   } = useWhisperStore();
+
+  const { config: aiConfig } = useAIServiceStore();
 
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -189,13 +172,13 @@ const VoiceRecordDialog = ({
         return;
       }
 
-      // Only try to load if we're open and not already loaded/loading
-      if (open && !isModelLoaded && !whisperLoading) {
+      // Only try to load Whisper if we're open, not loaded/loading, and no external ASR is configured
+      if (open && !isModelLoaded && !whisperLoading && !aiConfig.asrModel) {
         setShowLoadingOverlay(true);
         try {
           await loadModel();
           if (mounted) {
-            if (whisperError) {  // Check for errors after loading
+            if (whisperError) {
               setShowLoadingOverlay(false);
               setTranscriptionError(whisperError);
               errorTimeout = setTimeout(() => {
@@ -205,7 +188,6 @@ const VoiceRecordDialog = ({
               }, 2000);
             } else {
               setShowLoadingOverlay(false);
-              // Start recording after a short delay
               if (!hasStartedOnce && autoStart) {
                 setTimeout(() => {
                   if (mounted) {
@@ -227,9 +209,8 @@ const VoiceRecordDialog = ({
             }, 2000);
           }
         }
-      } else if (open && isModelLoaded && !whisperLoading && !whisperError && !hasStartedOnce && autoStart) {
-        // Model is already loaded, start recording directly
-        setShowLoadingOverlay(false);
+      } else if (open && (isModelLoaded || aiConfig.asrModel) && !hasStartedOnce && autoStart) {
+        // Start recording immediately if model is loaded or external ASR is configured
         setTimeout(() => {
           if (mounted) {
             startRecording();
@@ -246,7 +227,7 @@ const VoiceRecordDialog = ({
         clearTimeout(errorTimeout);
       }
     };
-  }, [open, isModelLoaded, whisperLoading, whisperError, loadModel, autoStart, startRecording, handleClose, hasStartedOnce]);
+  }, [open, isModelLoaded, whisperLoading, whisperError, loadModel, autoStart, startRecording, handleClose, hasStartedOnce, aiConfig.asrModel]);
 
   useEffect(() => {
     if (!open) {
@@ -462,6 +443,12 @@ const VoiceRecordDialog = ({
                 {transcribedText}
               </Typography>
             </Paper>
+          )}
+
+          {!isRecording && !isProcessing && (
+            <Typography variant="caption" color="textSecondary">
+              Using {isModelLoaded ? 'local Whisper model' : (aiConfig.asrModel ? 'external ASR service' : 'no ASR service configured')}
+            </Typography>
           )}
         </Box>
 
