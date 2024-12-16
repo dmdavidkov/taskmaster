@@ -20,7 +20,7 @@ class AIService {
         this.initializationError = null;
         this.initializationPromise = null;
 
-        // Register IPC handlers
+        // Register IPC handlers first
         this.registerIpcHandlers();
     }
 
@@ -59,70 +59,86 @@ class AIService {
         });
     }
 
-    async initialize() {
-        if (this.initializationPromise) {
-            return this.initializationPromise;
-        }
-
-        this.initializationPromise = (async () => {
-            try {
-                const config = this.getCurrentConfig();
-                
-                if (!config.apiKey) {
-                    this.isInitialized = false;
-                    this.initializationError = new Error('API key not configured');
-                    return;
-                }
-
-                // Initialize OpenAI client
-                this.client = new OpenAI({
-                    baseURL: config.baseURL,
-                    apiKey: config.apiKey,
-                });
-
-                // Initialize Groq client if ASR model is configured
-                if (config.asrModel) {
-                    this.groqClient = new Groq({
-                        apiKey: config.apiKey
-                    });
-                }
-
-                this.modelName = config.modelName;
-                this.currentApiKey = config.apiKey;
-                this.isInitialized = true;
-                this.initializationError = null;
-
-                log.info('AI Service initialized successfully');
-            } catch (error) {
-                this.isInitialized = false;
-                this.initializationError = error;
-                log.error('Failed to initialize AI Service:', error);
-                throw error;
+    async ensureInitialized() {
+        try {
+            const config = await this.getCurrentConfig();
+            
+            // If already initialized with same config, return
+            if (this.isInitialized && this.currentApiKey === config.apiKey) {
+                return;
             }
-        })();
 
-        return this.initializationPromise;
-    }
+            log.info('Initializing AI Service with config:', {
+                hasApiKey: !!config.apiKey,
+                hasBaseURL: !!config.baseURL,
+                hasModelName: !!config.modelName,
+                hasASRModel: !!config.asrModel
+            });
 
-    getCurrentConfig() {
-        return {
-            baseURL: store.get('aiService.baseURL', 'https://api.studio.nebius.ai/v1/'),
-            apiKey: store.get('aiService.apiKey', ''),
-            modelName: store.get('aiService.modelName', 'Qwen/Qwen2.5-72B-Instruct-fast'),
-            asrModel: store.get('aiService.asrModel', '')
-        };
-    }
+            if (!config.apiKey) {
+                throw new Error('API key not configured for ASR service');
+            }
 
-    ensureInitialized() {
-        if (!this.isInitialized) {
-            throw new Error('AI service not initialized. Please configure the service first.');
+            // Initialize OpenAI client
+            this.client = new OpenAI({
+                baseURL: config.baseURL,
+                apiKey: config.apiKey,
+            });
+
+            // Initialize Groq client
+            this.groqClient = new Groq({
+                apiKey: config.apiKey
+            });
+
+            this.modelName = config.modelName;
+            this.currentApiKey = config.apiKey;
+            this.isInitialized = true;
+            this.initializationError = null;
+
+            log.info('AI Service initialized successfully');
+        } catch (error) {
+            log.error('Failed to initialize AI Service:', error);
+            this.isInitialized = false;
+            this.initializationError = error;
+            throw error;
         }
+    }
 
-        const currentConfig = this.getCurrentConfig();
-        
-        // Re-initialize if config has changed
-        if (currentConfig.apiKey !== this.currentApiKey) {
-            this.initialize();
+    async getCurrentConfig() {
+        try {
+            // Get the raw config using the same path as preferences
+            const apiKey = store.get('aiService.apiKey');
+            const baseURL = store.get('aiService.baseURL');
+            const modelName = store.get('aiService.modelName');
+            const asrModel = store.get('aiService.asrModel');
+
+            // Log the raw values for debugging
+            log.info('Raw config values:', {
+                hasApiKey: !!apiKey,
+                hasBaseURL: !!baseURL,
+                hasModelName: !!modelName,
+                hasASRModel: !!asrModel
+            });
+
+            // If no values found, try getting the full aiService object
+            if (!apiKey) {
+                const fullConfig = store.get('aiService');
+                log.info('Fallback config:', fullConfig);
+                
+                if (fullConfig && fullConfig.apiKey) {
+                    return fullConfig;
+                }
+            }
+
+            return {
+                baseURL: baseURL || 'https://api.studio.nebius.ai/v1/',
+                apiKey: apiKey || '',
+                modelName: modelName || 'Qwen/Qwen2.5-72B-Instruct-fast',
+                asrModel: asrModel || ''
+            };
+        } catch (error) {
+            log.error('Error getting config:', error);
+            throw error;
         }
     }
 
@@ -302,13 +318,24 @@ class AIService {
 
     async testConnection(testConfig) {
         try {
-            const tempClient = new OpenAI({
+            log.info('Testing connection with config:', {
+                hasApiKey: !!testConfig.apiKey,
+                baseURL: testConfig.baseURL,
+                modelName: testConfig.modelName
+            });
+
+            if (!testConfig.apiKey) {
+                throw new Error('API key not configured for ASR service');
+            }
+
+            // Create a temporary OpenAI client with the test config
+            const testClient = new OpenAI({
                 baseURL: testConfig.baseURL,
                 apiKey: testConfig.apiKey,
             });
 
-            const completion = await tempClient.chat.completions.create({
-                temperature: 0,
+            const completion = await testClient.chat.completions.create({
+                temperature: 0.7,
                 max_tokens: 10,
                 model: testConfig.modelName,
                 messages: [
@@ -320,52 +347,49 @@ class AIService {
             });
 
             if (completion.choices[0]?.message?.content) {
-                // Only initialize the service if the test was successful
-                await this.initialize();
+                // If test successful, update the store with the new config
+                store.set('aiService.apiKey', testConfig.apiKey);
+                store.set('aiService.baseURL', testConfig.baseURL);
+                store.set('aiService.modelName', testConfig.modelName);
+                store.set('aiService.asrModel', testConfig.asrModel);
+                
+                await this.ensureInitialized();
                 return { success: true };
             } else {
                 throw new Error('Invalid response from AI service');
             }
         } catch (error) {
             log.error('Error in testConnection:', error);
-            if (error.response?.status === 401) {
-                throw new Error('Authentication failed. Please check your API key.');
-            }
             throw error;
         }
     }
 
     async transcribeAudio(audioData, language) {
-        this.ensureInitialized();
-        
         try {
-            // Create a temporary file to store the audio data
-            const tempDir = os.tmpdir();
-            const tempFile = path.join(tempDir, `temp-${Date.now()}.wav`);
+            await this.ensureInitialized();
             
-            // Convert ArrayBuffer to Buffer for Node.js
-            const buffer = Buffer.from(audioData);
-            
-            // Write the audio buffer to a temporary file
-            await fs.promises.writeFile(tempFile, buffer);
-
-            // Initialize Groq client if using Groq ASR
             if (!this.groqClient) {
-                this.groqClient = new Groq({
-                    apiKey: this.currentApiKey
-                });
+                throw new Error('Groq client not initialized');
             }
 
-            // Make the transcription request
+            const tempDir = os.tmpdir();
+            const tempFile = path.join(tempDir, `temp-${Date.now()}.wav`);
+            const buffer = Buffer.from(audioData);
+            await fs.promises.writeFile(tempFile, buffer);
+
+            log.info('Starting transcription with Groq');
             const transcription = await this.groqClient.audio.transcriptions.create({
                 file: fs.createReadStream(tempFile),
-                model: this.getCurrentConfig().asrModel || "whisper-large-v3-turbo",
+                model: "whisper-large-v3",
                 language: language,
                 response_format: "text"
             });
 
-            // Clean up the temporary file
             await fs.promises.unlink(tempFile);
+
+            if (!transcription || (!transcription.text && typeof transcription !== 'string')) {
+                throw new Error('No transcription result received from ASR service');
+            }
 
             return transcription.text || transcription;
 

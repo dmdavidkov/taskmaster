@@ -239,6 +239,11 @@ function initializeIpcHandlers() {
       `);
     }
   });
+
+  // Add new handler for app ready state
+  ipcMain.handle('app:isReady', () => {
+    return app.isReady();
+  });
 }
 
 // Add this function to get theme background color

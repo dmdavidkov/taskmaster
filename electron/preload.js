@@ -65,6 +65,7 @@ contextBridge.exposeInMainWorld('electron', {
   app: {
     getVersion: () => ipcRenderer.invoke('get-app-version'),
     signalReactMounted: () => ipcRenderer.invoke('react-mounted'),
+    isReady: () => ipcRenderer.invoke('app:isReady'),
   },
   preferences: {
     get: (key) => ipcRenderer.invoke('preferences:get', key),

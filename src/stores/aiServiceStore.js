@@ -51,19 +51,43 @@ const useAIServiceStore = create(
       },
 
       initializeConfig: async () => {
-        const baseURL = await window.electron.preferences.get('baseURL');
-        const apiKey = await window.electron.preferences.get('apiKey');
-        const modelName = await window.electron.preferences.get('modelName');
-        
-        if (baseURL || apiKey || modelName) {
-          set({
-            config: {
-              baseURL: baseURL || get().config.baseURL,
-              apiKey: apiKey || get().config.apiKey,
-              modelName: modelName || get().config.modelName,
-              asrModel: get().config.asrModel,
-            }
+        try {
+          // Get all preferences at once
+          const preferences = await Promise.all([
+            window.electron.preferences.get('aiService.baseURL'),
+            window.electron.preferences.get('aiService.apiKey'),
+            window.electron.preferences.get('aiService.modelName'),
+            window.electron.preferences.get('aiService.asrModel')
+          ]);
+          
+          const [baseURL, apiKey, modelName, asrModel] = preferences;
+          
+          // Log the retrieved preferences
+          console.log('Retrieved preferences:', {
+            hasBaseURL: !!baseURL,
+            hasApiKey: !!apiKey,
+            hasModelName: !!modelName,
+            hasASRModel: !!asrModel
           });
+          
+          const newConfig = {
+            baseURL: baseURL || get().config.baseURL,
+            apiKey: apiKey || get().config.apiKey,
+            modelName: modelName || get().config.modelName,
+            asrModel: asrModel || get().config.asrModel,
+          };
+          
+          set({
+            config: newConfig,
+            isConfigured: !!newConfig.apiKey
+          });
+
+          // Save the complete config to electron-store
+          await window.electron.preferences.set('aiService', newConfig);
+          
+        } catch (error) {
+          console.error('Error initializing AI service config:', error);
+          set({ error: error.message });
         }
       },
 
@@ -109,10 +133,10 @@ const useAIServiceStore = create(
           asrModel: '',
         };
         
-        await window.electron.preferences.set('baseURL', defaultConfig.baseURL);
-        await window.electron.preferences.set('apiKey', defaultConfig.apiKey);
-        await window.electron.preferences.set('modelName', defaultConfig.modelName);
-        await window.electron.preferences.set('asrModel', defaultConfig.asrModel);
+        await window.electron.preferences.set('aiService.baseURL', defaultConfig.baseURL);
+        await window.electron.preferences.set('aiService.apiKey', defaultConfig.apiKey);
+        await window.electron.preferences.set('aiService.modelName', defaultConfig.modelName);
+        await window.electron.preferences.set('aiService.asrModel', defaultConfig.asrModel);
         
         set({
           config: defaultConfig,
@@ -130,7 +154,12 @@ const useAIServiceStore = create(
 
 // Initialize config when the store is created
 if (typeof window !== 'undefined') {
-  useAIServiceStore.getState().initializeConfig();
+    // Use window load event which ensures everything is ready
+    window.addEventListener('load', () => {
+        setTimeout(() => {
+            useAIServiceStore.getState().initializeConfig();
+        }, 100); // Small delay to ensure everything is properly initialized
+    });
 }
 
 export default useAIServiceStore;

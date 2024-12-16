@@ -209,8 +209,11 @@ const useWhisperStore = create(
         }
         
         // If local model is not loaded but external ASR is configured, use that
-        if (aiConfig.asrModel) {
-          console.log('🌐 Using external ASR service for transcription');
+        if (aiConfig.asrModel && aiConfig.apiKey) {
+          console.log('🌐 Using external ASR service for transcription', {
+            model: aiConfig.asrModel,
+            hasApiKey: !!aiConfig.apiKey
+          });
           try {
             // Convert Float32Array to regular array
             const audioArray = Array.from(audio);
@@ -252,6 +255,10 @@ const useWhisperStore = create(
               language,
               model: aiConfig.asrModel
             });
+            
+            if (!text) {
+              throw new Error('No transcription result received');
+            }
             
             return text;
           } catch (error) {
